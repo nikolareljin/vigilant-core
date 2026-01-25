@@ -1,5 +1,7 @@
 # VigilantCore
 
+<img src="./vigilant_core.png" />
+
 VigilantCore is a local, cross-platform monitoring app that tracks **Impactful Events** for a specific subject, using a local LLM (Ollama) to score impact and generate predictive outcomes. It is designed to be simple for non-technical users while still offering an AI-driven, location-aware signal.
 
 ## User Journey (Spec-Driven)
