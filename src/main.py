@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import datetime
-from typing import Dict, List
+from typing import Dict
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
