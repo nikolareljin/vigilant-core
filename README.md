@@ -77,14 +77,19 @@ If you provide no RSS feeds or API keys, VigilantCore will still:
 - Attempt to discover local police/government and local news RSS feeds near your location.
 - Pull social chatter via Reddit search RSS tied to your subject and location.
 
+### RSS Feeds vs Curated Sources
+By default, any RSS feeds you add are *merged* with the built-in curated sources.
+If you want to use only the RSS feeds you provide, enable **"Only use RSS feeds listed above"** in Settings.
+
 ## Optional Search API Keys (Better Coverage)
 If you set any of the API keys below, VigilantCore will use them automatically. If not set, it falls back to RSS and the built-in discovery.
 
 ### Google Programmable Search Engine (CSE)
-1. Create a Custom Search Engine: https://programmablesearchengine.google.com/
+1. Create a Custom Search Engine and set it to **Search the entire web**:
+   https://programmablesearchengine.google.com/
 2. Enable the Custom Search JSON API and create an API key:
    https://developers.google.com/custom-search/v1/overview
-3. Set these variables (use `.env` in the app config dir or environment):
+3. Set:
 ```bash
 GOOGLE_CSE_API_KEY=your_key
 GOOGLE_CSE_CX=your_search_engine_id
@@ -102,14 +107,10 @@ BING_SEARCH_MARKET=en-US
 BING_SEARCH_SAFE=Moderate
 ```
 
-### X (Twitter) API v2
-1. Apply for a developer account and create an app:
-   https://developer.x.com/
-2. Create a Bearer Token and set:
-```bash
-X_API_BEARER=your_bearer_token
-```
-Note: Recent Search requires an access tier that supports it.
+### DuckDuckGo Web Search (No Key Required)
+DuckDuckGo HTML search is available without an API key. Enable/disable it in Settings:
+- Web UI: **Enable DuckDuckGo web search**
+- Qt UI: **Enable DuckDuckGo web search**
 
 ### Facebook & Instagram (Meta Graph API)
 Meta does not provide a general public search API. Access typically requires:
@@ -195,3 +196,10 @@ pyinstaller --onefile --windowed src/main.py --name VigilantCore
 ## Repository Tips
 - **Repo name**: `vigilant-core`
 - **Branch protection**: Require PR reviews before merging into `main`.
+### NewsAPI Time Window
+You can control how recent NewsAPI results should be. Default is **6 hours**.
+- Web UI: **News time window (hours)**
+- Qt UI: **News time window (hours)**
+
+### NewsAPI Sort Order
+Default is **popularity**. You can also choose **publishedAt** or **relevancy** from the Settings UI.

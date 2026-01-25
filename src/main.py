@@ -33,8 +33,17 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.radius_input = QtWidgets.QLineEdit()
         self.relax_location_checkbox = QtWidgets.QCheckBox("Relax location filter")
         self.rss_input = QtWidgets.QPlainTextEdit()
+        self.use_only_rss_checkbox = QtWidgets.QCheckBox("Only use RSS feeds listed above")
         self.api_input = QtWidgets.QLineEdit()
         self.api_input.setEchoMode(QtWidgets.QLineEdit.Password)
+        self.google_cse_key_input = QtWidgets.QLineEdit()
+        self.google_cse_key_input.setEchoMode(QtWidgets.QLineEdit.Password)
+        self.google_cse_cx_input = QtWidgets.QLineEdit()
+        self.news_window_combo = QtWidgets.QComboBox()
+        self.news_window_combo.addItems(["6", "24", "72", "168"])
+        self.news_sort_combo = QtWidgets.QComboBox()
+        self.news_sort_combo.addItems(["popularity", "publishedAt", "relevancy"])
+        self.duckduckgo_checkbox = QtWidgets.QCheckBox("Enable DuckDuckGo web search")
         self.subject_input.setToolTip("What you want to monitor (e.g., weather alerts).")
         self.question_input.setToolTip("Optional question to guide the AI focus.")
         self.light_model_checkbox.setToolTip("Use a smaller model on low-RAM systems.")
@@ -45,7 +54,13 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.radius_input.setToolTip("Radius in kilometers for local matching (default 50).")
         self.relax_location_checkbox.setToolTip("Show results even if they don't mention the location.")
         self.rss_input.setToolTip("Paste RSS feed URLs, one per line.")
+        self.use_only_rss_checkbox.setToolTip("Disable curated sources and only use your RSS list.")
         self.api_input.setToolTip("News API key for broader coverage (kept locally).")
+        self.google_cse_key_input.setToolTip("Google CSE API key for web search.")
+        self.google_cse_cx_input.setToolTip("Google CSE Search Engine ID (CX).")
+        self.news_window_combo.setToolTip("News API time window in hours.")
+        self.news_sort_combo.setToolTip("NewsAPI sort order.")
+        self.duckduckgo_checkbox.setToolTip("Use DuckDuckGo HTML search for additional results.")
 
         form = QtWidgets.QFormLayout()
         form.addRow("Subject", self.subject_input)
@@ -58,7 +73,22 @@ class FirstRunDialog(QtWidgets.QDialog):
         form.addRow("Radius (km)", self.radius_input)
         form.addRow("", self.relax_location_checkbox)
         form.addRow("RSS Feeds (one per line)", self.rss_input)
+        form.addRow("", self.use_only_rss_checkbox)
         form.addRow("News API Key", self.api_input)
+        form.addRow("Google CSE API Key", self.google_cse_key_input)
+        form.addRow("Google CSE CX", self.google_cse_cx_input)
+        form.addRow("News time window (hours)", self.news_window_combo)
+        form.addRow("NewsAPI sort order", self.news_sort_combo)
+        form.addRow("", self.duckduckgo_checkbox)
+        api_links = QtWidgets.QLabel(
+            "<a href='https://programmablesearchengine.google.com/'>Google CSE</a> | "
+            "<a href='https://developers.google.com/custom-search/v1/overview'>Google JSON API</a> | "
+            "<a href='https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/create-bing-search-service-resource'>Bing Search</a> | "
+            "<a href='https://newsapi.org/'>NewsAPI</a>"
+        )
+        api_links.setOpenExternalLinks(True)
+        api_links.setToolTip("Open API key signup pages in your browser.")
+        form.addRow("Get API Keys", api_links)
 
         button_box = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel
@@ -90,7 +120,13 @@ class FirstRunDialog(QtWidgets.QDialog):
             relax_location_filter=self.relax_location_checkbox.isChecked(),
             prefer_light_model=self.light_model_checkbox.isChecked(),
             rss_feeds=rss_list,
+            use_only_rss_feeds=self.use_only_rss_checkbox.isChecked(),
             news_api_key=self.api_input.text().strip() or None,
+            news_time_window_hours=int(self.news_window_combo.currentText() or "6"),
+            news_sort_by=self.news_sort_combo.currentText() or "popularity",
+            google_cse_api_key=self.google_cse_key_input.text().strip() or None,
+            google_cse_cx=self.google_cse_cx_input.text().strip() or None,
+            enable_duckduckgo_search=self.duckduckgo_checkbox.isChecked(),
         )
 
 
@@ -254,8 +290,18 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.relax_location_checkbox.setChecked(self.config.relax_location_filter)
         if self.config.rss_feeds:
             dialog.rss_input.setPlainText("\n".join(self.config.rss_feeds))
+        dialog.use_only_rss_checkbox.setChecked(self.config.use_only_rss_feeds)
         if self.config.news_api_key:
             dialog.api_input.setText(self.config.news_api_key)
+        if self.config.news_time_window_hours:
+            dialog.news_window_combo.setCurrentText(str(self.config.news_time_window_hours))
+        if self.config.news_sort_by:
+            dialog.news_sort_combo.setCurrentText(self.config.news_sort_by)
+        if self.config.google_cse_api_key:
+            dialog.google_cse_key_input.setText(self.config.google_cse_api_key)
+        if self.config.google_cse_cx:
+            dialog.google_cse_cx_input.setText(self.config.google_cse_cx)
+        dialog.duckduckgo_checkbox.setChecked(self.config.enable_duckduckgo_search)
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             self.config = dialog.to_config()
             save_config(self.config)

@@ -16,6 +16,13 @@ class Source:
     url: str
 
 
+@dataclass(frozen=True)
+class SearchResult:
+    title: str
+    url: str
+    snippet: str
+
+
 DEFAULT_SOURCES: List[Source] = [
     # United States
     Source("AP News", "https://apnews.com"),
@@ -318,7 +325,7 @@ def _extract_ddg_url(href: str) -> Optional[str]:
     return None
 
 
-def _search_duckduckgo(query: str, client: httpx.Client) -> List[str]:
+def _search_duckduckgo_urls(query: str, client: httpx.Client) -> List[str]:
     try:
         resp = client.get(
             "https://html.duckduckgo.com/html/",
@@ -341,6 +348,45 @@ def _search_duckduckgo(query: str, client: httpx.Client) -> List[str]:
             continue
         links.append(href)
     return list(dict.fromkeys(links))
+
+
+def _search_duckduckgo_results(query: str, client: httpx.Client) -> List[SearchResult]:
+    try:
+        resp = client.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=8.0,
+        )
+        resp.raise_for_status()
+    except Exception:
+        return []
+    soup = BeautifulSoup(resp.text, "html.parser")
+    results: List[SearchResult] = []
+    for result in soup.select(".result"):
+        anchor = result.select_one("a.result__a")
+        if not anchor:
+            continue
+        href = _extract_ddg_url(anchor.get("href", ""))
+        if not href or not href.startswith("http") or _is_ignored_domain(href):
+            continue
+        title = anchor.get_text(strip=True)
+        snippet = ""
+        snippet_el = result.select_one(".result__snippet")
+        if snippet_el:
+            snippet = snippet_el.get_text(" ", strip=True)
+        results.append(SearchResult(title=title or "(no title)", url=href, snippet=snippet))
+    return results
+
+
+def search_duckduckgo_results(query: str, max_results: int = 20) -> List[SearchResult]:
+    if not query:
+        return []
+    with httpx.Client(follow_redirects=True, timeout=8.0) as client:
+        results = _search_duckduckgo_results(query, client)
+    if max_results > 0:
+        return results[:max_results]
+    return results
 
 
 def discover_local_source_feeds(
@@ -376,7 +422,7 @@ def discover_local_source_feeds(
     feeds: List[str] = []
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
         for query in queries:
-            for result_url in _search_duckduckgo(query, client)[:6]:
+            for result_url in _search_duckduckgo_urls(query, client)[:6]:
                 if len(feeds) >= max_feeds:
                     return feeds
                 root_url = _root_url(result_url)
@@ -424,6 +470,10 @@ def build_default_feeds(max_feeds: int = 180) -> List[str]:
                         if len(feeds) >= max_feeds:
                             break
     return feeds
+
+
+def build_all_feeds(max_feeds: int = 400) -> List[str]:
+    return build_default_feeds(max_feeds=max_feeds)
 
 
 def ensure_seed_feeds(existing: List[str]) -> List[str]:

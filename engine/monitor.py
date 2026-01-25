@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from math import asin, cos, radians, sin, sqrt
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, Dict, Iterable, List, Optional
 
 import feedparser
@@ -16,10 +16,12 @@ from .parser import ImpactParser
 from utils import database
 from utils.config import AppConfig
 from utils.sources import (
+    build_all_feeds,
     build_local_feeds,
     build_social_feeds,
     discover_local_source_feeds,
     ensure_seed_feeds,
+    search_duckduckgo_results,
 )
 
 
@@ -44,6 +46,7 @@ class MonitorEngine:
         self._geo = pgeocode.Nominatim("us")
         self._local_source_feeds: Optional[List[str]] = None
         self._social_feeds: Optional[List[str]] = None
+        self._seed_feeds: Optional[List[str]] = None
         location_context = self._location_context()
         self._parser = ImpactParser(
             config.subject,
@@ -78,6 +81,11 @@ class MonitorEngine:
                 self.config.subject, self.config.location_name, self.config.zip_code
             )
         return self._social_feeds
+
+    def _get_seed_feeds(self) -> List[str]:
+        if self._seed_feeds is None:
+            self._seed_feeds = ensure_seed_feeds([])
+        return self._seed_feeds
 
     def _get_center_coords(self) -> Optional[tuple[float, float]]:
         if self.config.latitude is not None and self.config.longitude is not None:
@@ -172,12 +180,15 @@ class MonitorEngine:
         if not self.config.news_api_key:
             return items
         query = self._build_search_query()
+        window_hours = max(1, int(self.config.news_time_window_hours or 6))
+        since = (datetime.utcnow() - timedelta(hours=window_hours)).isoformat() + "Z"
         url = "https://newsapi.org/v2/everything"
         params = {
             "q": query,
             "pageSize": 50,
-            "sortBy": "publishedAt",
+            "sortBy": self.config.news_sort_by or "popularity",
             "language": "en",
+            "from": since,
         }
         headers = {"X-Api-Key": self.config.news_api_key}
         async with httpx.AsyncClient(timeout=20) as client:
@@ -211,42 +222,6 @@ class MonitorEngine:
         if self.config.latitude is not None and self.config.longitude is not None:
             query = f"{query} {self.config.latitude},{self.config.longitude}"
         return query.strip()
-
-    async def fetch_google_cse_items(self) -> List[AlertItem]:
-        items: List[AlertItem] = []
-        if not self.config.google_cse_api_key or not self.config.google_cse_cx:
-            return items
-        query = self._build_search_query()
-        if not query:
-            return items
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": self.config.google_cse_api_key,
-            "cx": self.config.google_cse_cx,
-            "q": query,
-            "num": 10,
-        }
-        async with httpx.AsyncClient(timeout=20) as client:
-            try:
-                resp = await client.get(url, params=params)
-                resp.raise_for_status()
-                payload = resp.json()
-            except Exception:
-                return items
-        for entry in payload.get("items", []) or []:
-            link = entry.get("link")
-            if not link:
-                continue
-            items.append(
-                AlertItem(
-                    url=link,
-                    title=entry.get("title") or "(no title)",
-                    snippet=entry.get("snippet") or "",
-                    published_at=None,
-                    source="Google CSE",
-                )
-            )
-        return items
 
     async def fetch_bing_items(self) -> List[AlertItem]:
         items: List[AlertItem] = []
@@ -285,51 +260,83 @@ class MonitorEngine:
             )
         return items
 
-    async def fetch_x_items(self) -> List[AlertItem]:
+    async def fetch_duckduckgo_items(self) -> List[AlertItem]:
+        if not self.config.enable_duckduckgo_search:
+            return []
+        query = self._build_search_query()
+        if not query:
+            return []
         items: List[AlertItem] = []
-        if not self.config.x_api_bearer:
+        for result in search_duckduckgo_results(query, max_results=20):
+            items.append(
+                AlertItem(
+                    url=result.url,
+                    title=result.title,
+                    snippet=result.snippet,
+                    published_at=None,
+                    source="DuckDuckGo",
+                )
+            )
+        return items
+
+    async def fetch_google_cse_items(self) -> List[AlertItem]:
+        items: List[AlertItem] = []
+        if not self.config.google_cse_api_key or not self.config.google_cse_cx:
             return items
         query = self._build_search_query()
         if not query:
             return items
-        url = "https://api.x.com/2/tweets/search/recent"
-        params = {"query": query, "max_results": 10, "tweet.fields": "created_at"}
-        headers = {"Authorization": f"Bearer {self.config.x_api_bearer}"}
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": self.config.google_cse_api_key,
+            "cx": self.config.google_cse_cx,
+            "q": query,
+            "num": 10,
+        }
         async with httpx.AsyncClient(timeout=20) as client:
             try:
-                resp = await client.get(url, params=params, headers=headers)
+                resp = await client.get(url, params=params)
                 resp.raise_for_status()
                 payload = resp.json()
             except Exception:
                 return items
-        for tweet in payload.get("data", []) or []:
-            tweet_id = tweet.get("id")
-            text = tweet.get("text") or ""
-            if not tweet_id or not text:
+        for entry in payload.get("items", []) or []:
+            link = entry.get("link")
+            if not link:
                 continue
             items.append(
                 AlertItem(
-                    url=f"https://x.com/i/web/status/{tweet_id}",
-                    title=(text[:77] + "...") if len(text) > 80 else text,
-                    snippet=text,
-                    published_at=tweet.get("created_at"),
-                    source="X",
+                    url=link,
+                    title=entry.get("title") or "(no title)",
+                    snippet=entry.get("snippet") or "",
+                    published_at=None,
+                    source="Google CSE",
                 )
             )
         return items
 
     async def gather_items(self) -> List[AlertItem]:
-        feed_urls = ensure_seed_feeds(self.config.rss_feeds)
+        feed_urls = list(self.config.rss_feeds)
+        if not self.config.use_only_rss_feeds:
+            for feed in self._get_seed_feeds():
+                if feed not in feed_urls:
+                    feed_urls.append(feed)
+        location_active = bool(self.config.location_name or self.config.zip_code)
+        local_signal_feeds: List[str] = []
         local_feeds = build_local_feeds(self.config.location_name, self.config.zip_code)
         if local_feeds:
             for feed in local_feeds:
                 if feed not in feed_urls:
                     feed_urls.append(feed)
+                if feed not in local_signal_feeds:
+                    local_signal_feeds.append(feed)
         local_source_feeds = self._get_local_source_feeds()
         if local_source_feeds:
             for feed in local_source_feeds:
                 if feed not in feed_urls:
                     feed_urls.append(feed)
+                if feed not in local_signal_feeds:
+                    local_signal_feeds.append(feed)
         social_feeds = self._get_social_feeds()
         if social_feeds:
             for feed in social_feeds:
@@ -338,13 +345,19 @@ class MonitorEngine:
         google_news_feed = self._build_google_news_feed()
         if google_news_feed and google_news_feed not in feed_urls:
             feed_urls = feed_urls + [google_news_feed]
+        if google_news_feed and google_news_feed not in local_signal_feeds:
+            local_signal_feeds.append(google_news_feed)
+        if location_active and not local_signal_feeds and not self.config.use_only_rss_feeds:
+            for feed in build_all_feeds():
+                if feed not in feed_urls:
+                    feed_urls.append(feed)
         self.config.rss_feeds = feed_urls
         results = await asyncio.gather(
             self.fetch_rss_items(feed_urls),
             self.fetch_news_api_items(),
             self.fetch_google_cse_items(),
             self.fetch_bing_items(),
-            self.fetch_x_items(),
+            self.fetch_duckduckgo_items(),
         )
         combined = []
         for group in results:

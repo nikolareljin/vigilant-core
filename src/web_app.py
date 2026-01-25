@@ -171,7 +171,7 @@ SETUP_TEMPLATE = """
 </head>
 <body>
   <h1>VigilantCore Setup</h1>
-  <p class="help">Enter your local area and what you want to track. We auto-detect location when possible.</p>
+  <p class="help">Enter your local area and what you want to track. Provide city/state/country/ZIP for better local feeds. We auto-detect location when possible.</p>
   <form method="post">
     <label>Event / Subject</label>
     <input name="subject" value="{{ config.subject }}" placeholder="e.g., Weather Alerts" required />
@@ -186,7 +186,7 @@ SETUP_TEMPLATE = """
     </select>
 
     <label>Location Name</label>
-    <input name="location_name" value="{{ config.location_name }}" placeholder="City, Region" />
+    <input name="location_name" value="{{ config.location_name }}" placeholder="City, State, Country" />
 
     <label>ZIP Code</label>
     <input name="zip_code" value="{{ config.zip_code or '' }}" placeholder="ZIP" />
@@ -209,8 +209,51 @@ SETUP_TEMPLATE = """
     <label>RSS Feeds (auto-filled, optional)</label>
     <textarea name="rss_feeds" rows="4" placeholder="Auto-filled from major sources">{{ '\n'.join(config.rss_feeds) }}</textarea>
 
+    <label>Only use RSS feeds listed above</label>
+    <select name="use_only_rss_feeds">
+      <option value="no" {% if not config.use_only_rss_feeds %}selected{% endif %}>No (include curated sources)</option>
+      <option value="yes" {% if config.use_only_rss_feeds %}selected{% endif %}>Yes (only these feeds)</option>
+    </select>
+
     <label>News API Key (optional)</label>
     <input name="news_api_key" type="password" value="{{ config.news_api_key or '' }}" />
+
+    <label>Google CSE API Key (optional)</label>
+    <input name="google_cse_api_key" type="password" value="{{ config.google_cse_api_key or '' }}" />
+
+    <label>Google CSE CX (Search Engine ID)</label>
+    <input name="google_cse_cx" value="{{ config.google_cse_cx or '' }}" placeholder="e.g., 0123456789:abcde" />
+
+    <label>News time window (hours)</label>
+    <select name="news_time_window_hours">
+      {% set window = config.news_time_window_hours or 6 %}
+      <option value="6" {% if window == 6 %}selected{% endif %}>Last 6 hours (default)</option>
+      <option value="24" {% if window == 24 %}selected{% endif %}>Last 24 hours</option>
+      <option value="72" {% if window == 72 %}selected{% endif %}>Last 72 hours</option>
+      <option value="168" {% if window == 168 %}selected{% endif %}>Last 7 days</option>
+    </select>
+
+    <label>NewsAPI sort order</label>
+    <select name="news_sort_by">
+      {% set sort_by = (config.news_sort_by or 'popularity') %}
+      <option value="popularity" {% if sort_by == "popularity" %}selected{% endif %}>Popularity (default)</option>
+      <option value="publishedAt" {% if sort_by == "publishedAt" %}selected{% endif %}>Published time</option>
+      <option value="relevancy" {% if sort_by == "relevancy" %}selected{% endif %}>Relevancy</option>
+    </select>
+
+    <label>Enable DuckDuckGo web search</label>
+    <select name="enable_duckduckgo_search">
+      <option value="yes" {% if config.enable_duckduckgo_search %}selected{% endif %}>Yes (default)</option>
+      <option value="no" {% if not config.enable_duckduckgo_search %}selected{% endif %}>No</option>
+    </select>
+
+    <label>Get API Keys (opens new tabs)</label>
+    <div class="help">
+      <a href="https://programmablesearchengine.google.com/" target="_blank">Google CSE</a> |
+      <a href="https://developers.google.com/custom-search/v1/overview" target="_blank">Google JSON API</a> |
+      <a href="https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/create-bing-search-service-resource" target="_blank">Bing Search</a> |
+      <a href="https://newsapi.org/" target="_blank">NewsAPI</a>
+    </div>
 
     <button type="submit">Save & Start</button>
   </form>
@@ -286,10 +329,27 @@ def setup() -> str:
         config.relax_location_filter = (
             request.form.get("relax_location_filter", "no") == "yes"
         )
+        config.use_only_rss_feeds = request.form.get("use_only_rss_feeds", "no") == "yes"
+        window_val = request.form.get("news_time_window_hours", "6").strip()
+        try:
+            config.news_time_window_hours = max(1, int(window_val))
+        except ValueError:
+            config.news_time_window_hours = 6
+        sort_by_val = request.form.get("news_sort_by", "popularity").strip()
+        if sort_by_val in {"popularity", "publishedAt", "relevancy"}:
+            config.news_sort_by = sort_by_val
+        else:
+            config.news_sort_by = "popularity"
+        config.enable_duckduckgo_search = (
+            request.form.get("enable_duckduckgo_search", "yes") == "yes"
+        )
+        config.google_cse_api_key = request.form.get("google_cse_api_key") or None
+        config.google_cse_cx = request.form.get("google_cse_cx") or None
         rss_raw = request.form.get("rss_feeds", "")
         config.rss_feeds = [line.strip() for line in rss_raw.splitlines() if line.strip()]
         config.news_api_key = request.form.get("news_api_key") or None
-        config.rss_feeds = ensure_seed_feeds(config.rss_feeds)
+        if not config.rss_feeds:
+            config.rss_feeds = ensure_seed_feeds(config.rss_feeds)
         save_config(config)
         monitor_service.stop()
         monitor_service.start(config)
