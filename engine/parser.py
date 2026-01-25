@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import json
 import os
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ try:
     from ollama import Client as OllamaClient
 except Exception:  # pragma: no cover - optional dependency import guard
     OllamaClient = None
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT_TEMPLATE = (
@@ -50,7 +53,7 @@ class ImpactParser:
         self.location = location
         self.question = question
         self.prefer_light_model = prefer_light_model
-        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        self.model = model or "qwen2.5:7b"
         self.ollama_host = ollama_host or os.getenv("OLLAMA_HOST")
         self._client = None
         if OllamaClient is not None:
@@ -60,6 +63,33 @@ class ImpactParser:
                 else OllamaClient()
             )
         self._maybe_downgrade_model_for_ram()
+        self._ensure_model_available()
+
+    def _ensure_model_available(self) -> None:
+        if self._client is None:
+            return
+        try:
+            models = self._client.list().get("models", [])
+            logger.info("Ollama models available: %d", len(models))
+        except Exception:
+            logger.exception("Failed to list Ollama models; disabling LLM parsing")
+            self._client = None
+            return
+        available = {model.get("name") for model in models if model.get("name")}
+        if self.model in available:
+            return
+        try:
+            logger.warning("Ollama model %r not found; pulling it now", self.model)
+            self._client.pull(self.model)
+        except Exception:
+            logger.exception("Failed to pull Ollama model %r", self.model)
+            if available:
+                fallback = next(iter(available))
+                logger.warning("Falling back to available model %r", fallback)
+                self.model = fallback
+            else:
+                logger.warning("No Ollama models available; disabling LLM parsing")
+                self._client = None
 
     def _maybe_downgrade_model_for_ram(self) -> None:
         if os.getenv("OLLAMA_MODEL"):
@@ -116,13 +146,18 @@ class ImpactParser:
             "is_relevant (bool), summary (string).\n"
             f"Headline: {headline}\nSnippet: {snippet}"
         )
-        response = self._client.chat(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        try:
+            response = self._client.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+        except Exception:
+            logger.exception("LLM parse failed; falling back to heuristic parser")
+            self._client = None
+            return self._fallback_parse(headline, snippet)
         content = response.get("message", {}).get("content", "{}").strip()
         try:
             payload = json.loads(content)

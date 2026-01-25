@@ -80,6 +80,12 @@ If you provide no RSS feeds or API keys, VigilantCore will still:
 ### RSS Feeds vs Curated Sources
 By default, any RSS feeds you add are *merged* with the built-in curated sources.
 If you want to use only the RSS feeds you provide, enable **"Only use RSS feeds listed above"** in Settings.
+To skip RSS entirely and use only API/search providers, enable **"Disable RSS fetching"**.
+
+### Polling Interval
+You can control how often the app checks for new data (default **5 minutes**).
+- Web UI: **Polling interval (minutes)**
+- Qt UI: **Polling interval (minutes)**
 
 ## Optional Search API Keys (Better Coverage)
 If you set any of the API keys below, VigilantCore will use them automatically. If not set, it falls back to RSS and the built-in discovery.

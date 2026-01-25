@@ -215,6 +215,15 @@ SETUP_TEMPLATE = """
       <option value="yes" {% if config.use_only_rss_feeds %}selected{% endif %}>Yes (only these feeds)</option>
     </select>
 
+    <label>Disable RSS fetching</label>
+    <select name="disable_rss_fetch">
+      <option value="no" {% if not config.disable_rss_fetch %}selected{% endif %}>No (default)</option>
+      <option value="yes" {% if config.disable_rss_fetch %}selected{% endif %}>Yes (API/search only)</option>
+    </select>
+
+    <label>Polling interval (minutes)</label>
+    <input name="polling_minutes" value="{{ config.polling_minutes }}" placeholder="5" />
+
     <label>News API Key (optional)</label>
     <input name="news_api_key" type="password" value="{{ config.news_api_key or '' }}" />
 
@@ -330,6 +339,12 @@ def setup() -> str:
             request.form.get("relax_location_filter", "no") == "yes"
         )
         config.use_only_rss_feeds = request.form.get("use_only_rss_feeds", "no") == "yes"
+        config.disable_rss_fetch = request.form.get("disable_rss_fetch", "no") == "yes"
+        polling_val = request.form.get("polling_minutes", "5").strip()
+        try:
+            config.polling_minutes = max(1, int(polling_val))
+        except ValueError:
+            config.polling_minutes = 5
         window_val = request.form.get("news_time_window_hours", "6").strip()
         try:
             config.news_time_window_hours = max(1, int(window_val))

@@ -41,3 +41,7 @@ config.json
 
 # Node (if ever added)
 node_modules/
+
+# Tests
+tests/*.json
+

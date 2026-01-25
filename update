@@ -13,4 +13,18 @@ if ! git submodule update --init --remote --recursive; then
   git submodule update --init --recursive
 fi
 
+if [[ ! -f "$ROOT_DIR/scripts/script-helpers/helpers.sh" ]]; then
+  SHARED_HELPERS_DIR="$ROOT_DIR/../script-helpers"
+  if [[ -f "$SHARED_HELPERS_DIR/helpers.sh" ]]; then
+    echo "script-helpers submodule missing; using shared workspace copy..."
+    mkdir -p "$ROOT_DIR/scripts/script-helpers"
+    cp -R "$SHARED_HELPERS_DIR/." "$ROOT_DIR/scripts/script-helpers/"
+  fi
+fi
+
+if [[ ! -f "$ROOT_DIR/scripts/script-helpers/helpers.sh" ]]; then
+  echo "script-helpers still not found. Ensure submodules are available or run from a clone with access." >&2
+  exit 1
+fi
+
 echo "Submodules are up to date."

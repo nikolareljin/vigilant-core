@@ -27,7 +27,8 @@ class AppConfig:
     prefer_light_model: bool = True
     rss_feeds: List[str] = field(default_factory=list)
     use_only_rss_feeds: bool = False
-    polling_minutes: int = 15
+    disable_rss_fetch: bool = False
+    polling_minutes: int = 5
     news_api_key: Optional[str] = None
     news_time_window_hours: int = 6
     news_sort_by: str = "popularity"
@@ -98,7 +99,8 @@ def load_config() -> AppConfig:
         prefer_light_model=bool(data.get("prefer_light_model", True)),
         rss_feeds=data.get("rss_feeds", []),
         use_only_rss_feeds=bool(data.get("use_only_rss_feeds", False)),
-        polling_minutes=int(data.get("polling_minutes", 15)),
+        disable_rss_fetch=bool(data.get("disable_rss_fetch", False)),
+        polling_minutes=int(data.get("polling_minutes", 5)),
         news_api_key=data.get("news_api_key"),
         news_time_window_hours=int(data.get("news_time_window_hours", 6)),
         news_sort_by=data.get("news_sort_by", "popularity"),
@@ -139,6 +141,7 @@ def save_config(config: AppConfig) -> None:
         "prefer_light_model": config.prefer_light_model,
         "rss_feeds": config.rss_feeds,
         "use_only_rss_feeds": config.use_only_rss_feeds,
+        "disable_rss_fetch": config.disable_rss_fetch,
         "polling_minutes": config.polling_minutes,
         "news_api_key": None,
         "news_time_window_hours": config.news_time_window_hours,
