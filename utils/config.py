@@ -25,6 +25,7 @@ class AppConfig:
     radius_km: int = 50
     relax_location_filter: bool = False
     prefer_light_model: bool = True
+    insight_refresh_minutes: int = 5
     rss_feeds: List[str] = field(default_factory=list)
     use_only_rss_feeds: bool = False
     disable_rss_fetch: bool = False
@@ -97,6 +98,7 @@ def load_config() -> AppConfig:
         radius_km=int(data.get("radius_km", 50)),
         relax_location_filter=bool(data.get("relax_location_filter", False)),
         prefer_light_model=bool(data.get("prefer_light_model", True)),
+        insight_refresh_minutes=int(data.get("insight_refresh_minutes", 5)),
         rss_feeds=data.get("rss_feeds", []),
         use_only_rss_feeds=bool(data.get("use_only_rss_feeds", False)),
         disable_rss_fetch=bool(data.get("disable_rss_fetch", False)),
@@ -139,6 +141,7 @@ def save_config(config: AppConfig) -> None:
         "radius_km": config.radius_km,
         "relax_location_filter": config.relax_location_filter,
         "prefer_light_model": config.prefer_light_model,
+        "insight_refresh_minutes": config.insight_refresh_minutes,
         "rss_feeds": config.rss_feeds,
         "use_only_rss_feeds": config.use_only_rss_feeds,
         "disable_rss_fetch": config.disable_rss_fetch,
