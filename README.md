@@ -29,6 +29,11 @@ VigilantCore prefers local signals by combining:
 2. Double-click `run.sh` (macOS/Linux) or `run.bat` (Windows).
 3. Fill out the setup wizard and click **Save**.
 
+## Qt UI (Desktop)
+Launch the desktop UI directly:
+- macOS/Linux: `./run-qt.sh`
+- Windows: `run-qt.bat`
+
 ## One-Command Bootstrap (curl/wget)
 You can install and launch the web dashboard in a single command:
 
@@ -53,6 +58,7 @@ This will:
 The local browser page prompts for:
 - **Event/Subject**
 - **Monitoring Question (optional)**
+- **Prefer lighter model on 8GB or less**
 - **Location / ZIP / GPS**
 - **Radius (km)**
 
@@ -129,9 +135,9 @@ python src/main.py
 ```
 
 ## Local LLM
-By default, the app uses `llama3.1:8b` from Ollama. You can override with:
+By default, the app uses `qwen2.5:7b` from Ollama. If RAM is 8GB or less, it auto-falls back to `qwen2.5:3b` unless `OLLAMA_MODEL` is set. You can override with:
 ```bash
-export OLLAMA_MODEL=llama3.1:8b
+export OLLAMA_MODEL=qwen2.5:7b
 ```
 
 ## Packaging (One-Click App)

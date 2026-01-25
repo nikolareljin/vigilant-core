@@ -8,3 +8,4 @@ pyinstaller
 pgeocode
 flask
 beautifulsoup4
+psutil

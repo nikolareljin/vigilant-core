@@ -48,7 +48,7 @@ DASHBOARD_TEMPLATE = """
   <header>
     <div>
       <h1>Live Impact Feed</h1>
-      <div class="meta">Subject: {{ subject }} | Location: {{ location }}</div>
+      <div class="meta">Subject: {{ subject }} | Location: {{ location }} | Model: {{ model }}</div>
     </div>
     <div class="toolbar">
       <a class="button secondary" href="{{ url_for('setup') }}">Edit Settings</a>
@@ -164,7 +164,7 @@ SETUP_TEMPLATE = """
     body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 24px; background: #f7f7fb; }
     form { max-width: 700px; background: white; padding: 18px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
     label { display: block; margin-top: 12px; font-weight: 600; }
-    input, textarea { width: 100%; padding: 10px; margin-top: 6px; border-radius: 6px; border: 1px solid #ddd; }
+    input, textarea, select { width: 100%; padding: 10px; margin-top: 6px; border-radius: 6px; border: 1px solid #ddd; }
     button { margin-top: 18px; padding: 10px 16px; background: #2f4bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
     .help { color: #666; font-size: 0.9em; }
   </style>
@@ -178,6 +178,12 @@ SETUP_TEMPLATE = """
 
     <label>Monitoring Question (optional)</label>
     <input name="question" value="{{ config.question }}" placeholder="e.g., Probability of electric outage?" />
+
+    <label>Prefer lighter model on 8GB or less</label>
+    <select name="prefer_light_model">
+      <option value="yes" {% if config.prefer_light_model %}selected{% endif %}>Yes (recommended)</option>
+      <option value="no" {% if not config.prefer_light_model %}selected{% endif %}>No</option>
+    </select>
 
     <label>Location Name</label>
     <input name="location_name" value="{{ config.location_name }}" placeholder="City, Region" />
@@ -263,6 +269,7 @@ def setup() -> str:
         config.subject = request.form.get("subject", "Impactful Events").strip() or "Impactful Events"
         config.location_name = request.form.get("location_name", "Your Area").strip() or "Your Area"
         config.question = request.form.get("question", "").strip()
+        config.prefer_light_model = request.form.get("prefer_light_model", "yes") == "yes"
         config.zip_code = request.form.get("zip_code") or None
         lat_val = request.form.get("latitude", "").strip()
         lon_val = request.form.get("longitude", "").strip()
@@ -291,10 +298,14 @@ def dashboard() -> str:
             config.rss_feeds = ensure_seed_feeds(config.rss_feeds)
             save_config(config)
         monitor_service.start(config)
+    model_name = "unknown"
+    if monitor_service._engine is not None:
+        model_name = monitor_service._engine.model_name
     return render_template_string(
         DASHBOARD_TEMPLATE,
         subject=config.subject,
         location=config.location_name,
+        model=model_name,
     )
 
 

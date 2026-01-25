@@ -41,6 +41,7 @@ class ImpactParser:
         subject: str,
         location: str,
         question: str = "",
+        prefer_light_model: bool = True,
         model: Optional[str] = None,
         ollama_host: Optional[str] = None,
     ) -> None:
@@ -48,7 +49,8 @@ class ImpactParser:
         self.subject = subject
         self.location = location
         self.question = question
-        self.model = model or os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+        self.prefer_light_model = prefer_light_model
+        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
         self.ollama_host = ollama_host or os.getenv("OLLAMA_HOST")
         self._client = None
         if OllamaClient is not None:
@@ -57,6 +59,27 @@ class ImpactParser:
                 if self.ollama_host
                 else OllamaClient()
             )
+        self._maybe_downgrade_model_for_ram()
+
+    def _maybe_downgrade_model_for_ram(self) -> None:
+        if os.getenv("OLLAMA_MODEL"):
+            return
+        if not self.prefer_light_model:
+            return
+        total_gb = self._get_total_ram_gb()
+        if total_gb is not None and total_gb <= 8:
+            self.model = "qwen2.5:3b"
+
+    def _get_total_ram_gb(self) -> Optional[float]:
+        try:
+            import psutil
+        except Exception:
+            return None
+        try:
+            total = psutil.virtual_memory().total
+        except Exception:
+            return None
+        return total / (1024 ** 3)
 
     def build_system_prompt(self) -> str:
         question = self.question.strip() or "None."
@@ -111,6 +134,9 @@ class ImpactParser:
             is_relevant=bool(payload.get("is_relevant", False)),
             summary=str(payload.get("summary", "")),
         )
+
+    def current_model(self) -> str:
+        return self.model
 
     async def parse_async(self, headline: str, snippet: str) -> ParsedImpact:
         if self._client is not None:

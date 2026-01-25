@@ -38,7 +38,13 @@ class MonitorEngine:
         self._stop_event = asyncio.Event()
         self._geo = pgeocode.Nominatim("us")
         location_context = self._location_context()
-        self._parser = ImpactParser(config.subject, location_context, config.question)
+        self._parser = ImpactParser(
+            config.subject,
+            location_context,
+            config.question,
+            prefer_light_model=config.prefer_light_model,
+        )
+        self.model_name = self._parser.current_model()
 
     def _location_context(self) -> str:
         parts = [self.config.location_name]

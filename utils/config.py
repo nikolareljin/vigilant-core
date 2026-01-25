@@ -23,6 +23,7 @@ class AppConfig:
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     radius_km: int = 50
+    prefer_light_model: bool = True
     rss_feeds: List[str] = field(default_factory=list)
     polling_minutes: int = 15
     news_api_key: Optional[str] = None
@@ -69,6 +70,7 @@ def load_config() -> AppConfig:
         latitude=data.get("latitude"),
         longitude=data.get("longitude"),
         radius_km=int(data.get("radius_km", 50)),
+        prefer_light_model=bool(data.get("prefer_light_model", True)),
         rss_feeds=data.get("rss_feeds", []),
         polling_minutes=int(data.get("polling_minutes", 15)),
         news_api_key=data.get("news_api_key"),
@@ -89,6 +91,7 @@ def save_config(config: AppConfig) -> None:
         "latitude": config.latitude,
         "longitude": config.longitude,
         "radius_km": config.radius_km,
+        "prefer_light_model": config.prefer_light_model,
         "rss_feeds": config.rss_feeds,
         "polling_minutes": config.polling_minutes,
         "news_api_key": None,

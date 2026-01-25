@@ -26,6 +26,7 @@ class FirstRunDialog(QtWidgets.QDialog):
 
         self.subject_input = QtWidgets.QLineEdit()
         self.question_input = QtWidgets.QLineEdit()
+        self.light_model_checkbox = QtWidgets.QCheckBox("Prefer lighter model on 8GB or less")
         self.location_input = QtWidgets.QLineEdit()
         self.zip_input = QtWidgets.QLineEdit()
         self.lat_input = QtWidgets.QLineEdit()
@@ -36,6 +37,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.api_input.setEchoMode(QtWidgets.QLineEdit.Password)
         self.subject_input.setToolTip("What you want to monitor (e.g., weather alerts).")
         self.question_input.setToolTip("Optional question to guide the AI focus.")
+        self.light_model_checkbox.setToolTip("Use a smaller model on low-RAM systems.")
         self.location_input.setToolTip("City/region name used for local relevance.")
         self.zip_input.setToolTip("ZIP code for local filtering and geocoding.")
         self.lat_input.setToolTip("Optional latitude for precise location filtering.")
@@ -47,6 +49,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         form = QtWidgets.QFormLayout()
         form.addRow("Subject", self.subject_input)
         form.addRow("Monitoring Question (optional)", self.question_input)
+        form.addRow("", self.light_model_checkbox)
         form.addRow("Location", self.location_input)
         form.addRow("ZIP Code", self.zip_input)
         form.addRow("Latitude", self.lat_input)
@@ -82,6 +85,7 @@ class FirstRunDialog(QtWidgets.QDialog):
             latitude=lat,
             longitude=lon,
             radius_km=radius,
+            prefer_light_model=self.light_model_checkbox.isChecked(),
             rss_feeds=rss_list,
             news_api_key=self.api_input.text().strip() or None,
         )
@@ -90,6 +94,7 @@ class FirstRunDialog(QtWidgets.QDialog):
 class MonitorThread(QtCore.QThread):
     new_alert = QtCore.Signal(dict)
     status = QtCore.Signal(str)
+    model = QtCore.Signal(str)
 
     def __init__(self, config: AppConfig, parent: QtCore.QObject | None = None) -> None:
         super().__init__(parent)
@@ -100,6 +105,7 @@ class MonitorThread(QtCore.QThread):
         async def _runner() -> None:
             self.status.emit("monitoring")
             self._engine = MonitorEngine(self.config, on_new_alert=self.new_alert.emit)
+            self.model.emit(self._engine.model_name)
             await self._engine.run_forever()
             self.status.emit("stopped")
 
@@ -135,12 +141,14 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
         self.status_label = QtWidgets.QLabel("Idle")
+        self.model_label = QtWidgets.QLabel("")
         self.start_button = QtWidgets.QPushButton("Start Monitoring")
         self.stop_button = QtWidgets.QPushButton("Stop")
         self.stop_button.setEnabled(False)
         self.start_button.setToolTip("Begin monitoring for new alerts.")
         self.stop_button.setToolTip("Pause background monitoring.")
         self.status_label.setToolTip("Shows current monitoring status.")
+        self.model_label.setToolTip("Active local model used for AI scoring.")
 
         self.start_button.clicked.connect(self.start_monitoring)
         self.stop_button.clicked.connect(self.stop_monitoring)
@@ -150,6 +158,7 @@ class MainWindow(QtWidgets.QMainWindow):
         controls.addWidget(self.stop_button)
         controls.addStretch(1)
         controls.addWidget(self.status_label)
+        controls.addWidget(self.model_label)
 
         central = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(central)
@@ -207,6 +216,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.monitor_thread = MonitorThread(self.config)
         self.monitor_thread.new_alert.connect(self.add_row)
         self.monitor_thread.status.connect(self.on_status)
+        self.monitor_thread.model.connect(self.on_model)
         self.monitor_thread.start()
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -222,10 +232,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_status(self, status: str) -> None:
         self.status_label.setText(status.capitalize())
 
+    def on_model(self, model_name: str) -> None:
+        self.model_label.setText(f"Model: {model_name}")
+
     def edit_config(self) -> None:
         dialog = FirstRunDialog(self)
         dialog.subject_input.setText(self.config.subject)
         dialog.question_input.setText(self.config.question)
+        dialog.light_model_checkbox.setChecked(self.config.prefer_light_model)
         dialog.location_input.setText(self.config.location_name)
         if self.config.zip_code:
             dialog.zip_input.setText(self.config.zip_code)
