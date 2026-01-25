@@ -36,6 +36,9 @@ Launch the desktop UI directly:
 - macOS/Linux: `./run-qt.sh`
 - Windows: `run-qt.bat`
 
+<img width="599" height="766" alt="image" src="https://github.com/user-attachments/assets/e482914c-03ba-444a-ab55-fd5e84a78dec" />
+
+
 ## One-Command Bootstrap (curl/wget)
 You can install and launch the web dashboard in a single command:
 
