@@ -31,12 +31,21 @@ VigilantCore prefers local signals by combining:
 2. Double-click `run.sh` (macOS/Linux) or `run.bat` (Windows).
 3. Fill out the setup wizard and click **Save**.
 
+Web interface results:
+
+<img width="1920" height="1335" alt="image" src="https://github.com/user-attachments/assets/b3f150f1-4bee-467c-84b1-ce6888906fdb" />
+
+
 ## Qt UI (Desktop)
 Launch the desktop UI directly:
 - macOS/Linux: `./run-qt.sh`
 - Windows: `run-qt.bat`
 
 <img width="599" height="766" alt="image" src="https://github.com/user-attachments/assets/e482914c-03ba-444a-ab55-fd5e84a78dec" />
+
+Results are displayed on the next view:
+
+<img width="1100" height="740" alt="image" src="https://github.com/user-attachments/assets/acf84f66-1408-4278-9785-1bbee3b0d63c" />
 
 
 ## One-Command Bootstrap (curl/wget)
@@ -101,6 +110,7 @@ If you set any of the API keys below, VigilantCore will use them automatically. 
 2. Enable the Custom Search JSON API and create an API key:
    https://developers.google.com/custom-search/v1/overview
 3. Set:
+
 ```bash
 GOOGLE_CSE_API_KEY=your_key
 GOOGLE_CSE_CX=your_search_engine_id
