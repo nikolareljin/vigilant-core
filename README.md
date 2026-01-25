@@ -29,6 +29,35 @@ VigilantCore prefers local signals by combining:
 2. Double-click `run.sh` (macOS/Linux) or `run.bat` (Windows).
 3. Fill out the setup wizard and click **Save**.
 
+## One-Command Bootstrap (curl/wget)
+You can install and launch the web dashboard in a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
+```
+
+or with wget:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
+```
+
+This will:
+- clone the repo (if missing),
+- update submodules,
+- create a venv,
+- install dependencies,
+- start the web dashboard at `http://127.0.0.1:8765`.
+
+## Web Dashboard (Browser)
+The local browser page prompts for:
+- **Event/Subject**
+- **Location / ZIP / GPS**
+- **Radius (km)**
+
+You can reopen the same page any time by visiting:
+`http://127.0.0.1:8765`
+
 ## Helper Scripts (script-helpers)
 This repo uses the shared `script-helpers` library like other projects in this workspace.
 Initialize submodules once before using `./scripts/*.sh`:

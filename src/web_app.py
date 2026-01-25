@@ -1,0 +1,256 @@
+"""Local web dashboard for VigilantCore."""
+
+from __future__ import annotations
+
+import asyncio
+import sys
+import threading
+import webbrowser
+from pathlib import Path
+from typing import Optional
+
+from flask import Flask, jsonify, redirect, render_template_string, request, url_for
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from engine.monitor import MonitorEngine  # noqa: E402
+from utils import database  # noqa: E402
+from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
+
+
+DASHBOARD_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VigilantCore Live Impact Feed</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 24px; background: #f7f7fb; }
+    header { display: flex; justify-content: space-between; align-items: center; }
+    h1 { margin: 0 0 8px 0; }
+    .meta { color: #666; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; background: white; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #eee; text-align: left; }
+    th { background: #f0f2f8; }
+    .score-high { color: #c0392b; font-weight: 600; }
+    .score-mid { color: #d35400; }
+    .toolbar { margin-top: 12px; display: flex; gap: 12px; }
+    .button { padding: 8px 14px; background: #2f4bff; color: white; border-radius: 6px; text-decoration: none; }
+    .button.secondary { background: #5f6b7a; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Live Impact Feed</h1>
+      <div class="meta">Subject: {{ subject }} | Location: {{ location }}</div>
+    </div>
+    <div class="toolbar">
+      <a class="button secondary" href="{{ url_for('setup') }}">Edit Settings</a>
+      <a class="button" href="/api/alerts" target="_blank">Raw JSON</a>
+    </div>
+  </header>
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Score</th>
+        <th>Title</th>
+        <th>Source</th>
+        <th>Relevant</th>
+        <th>Prediction</th>
+      </tr>
+    </thead>
+    <tbody id="feed"></tbody>
+  </table>
+
+<script>
+async function loadFeed() {
+  const res = await fetch('/api/alerts');
+  const data = await res.json();
+  const tbody = document.getElementById('feed');
+  tbody.innerHTML = '';
+  data.alerts.forEach(alert => {
+    const tr = document.createElement('tr');
+    const scoreClass = alert.impact_score >= 8 ? 'score-high' : (alert.impact_score >= 5 ? 'score-mid' : '');
+    tr.innerHTML = `
+      <td>${alert.created_at || ''}</td>
+      <td class="${scoreClass}">${alert.impact_score ?? ''}</td>
+      <td><a href="${alert.url}" target="_blank">${alert.title || ''}</a></td>
+      <td>${alert.source || ''}</td>
+      <td>${alert.is_relevant ? 'Yes' : 'No'}</td>
+      <td>${alert.predictive_outcome || ''}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+loadFeed();
+setInterval(loadFeed, 30000);
+</script>
+</body>
+</html>
+"""
+
+
+SETUP_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VigilantCore Setup</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 24px; background: #f7f7fb; }
+    form { max-width: 700px; background: white; padding: 18px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+    label { display: block; margin-top: 12px; font-weight: 600; }
+    input, textarea { width: 100%; padding: 10px; margin-top: 6px; border-radius: 6px; border: 1px solid #ddd; }
+    button { margin-top: 18px; padding: 10px 16px; background: #2f4bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .help { color: #666; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>VigilantCore Setup</h1>
+  <p class="help">Enter your local area and what you want to track. You can edit later.</p>
+  <form method="post">
+    <label>Event / Subject</label>
+    <input name="subject" value="{{ config.subject }}" placeholder="e.g., Weather Alerts" required />
+
+    <label>Location Name</label>
+    <input name="location_name" value="{{ config.location_name }}" placeholder="City, Region" />
+
+    <label>ZIP Code</label>
+    <input name="zip_code" value="{{ config.zip_code or '' }}" placeholder="ZIP" />
+
+    <label>Latitude</label>
+    <input name="latitude" value="{{ config.latitude or '' }}" placeholder="Optional" />
+
+    <label>Longitude</label>
+    <input name="longitude" value="{{ config.longitude or '' }}" placeholder="Optional" />
+
+    <label>Radius (km)</label>
+    <input name="radius_km" value="{{ config.radius_km }}" placeholder="50" />
+
+    <label>RSS Feeds (one per line)</label>
+    <textarea name="rss_feeds" rows="4" placeholder="https://...">{{ '\n'.join(config.rss_feeds) }}</textarea>
+
+    <label>News API Key</label>
+    <input name="news_api_key" type="password" value="{{ config.news_api_key or '' }}" />
+
+    <button type="submit">Save & Start</button>
+  </form>
+</body>
+</html>
+"""
+
+
+class MonitorService:
+    def __init__(self) -> None:
+        self._thread: Optional[threading.Thread] = None
+        self._engine: Optional[MonitorEngine] = None
+
+    def start(self, config: AppConfig) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._engine = MonitorEngine(config)
+
+        def _runner() -> None:
+            asyncio.run(self._engine.run_forever())
+
+        self._thread = threading.Thread(target=_runner, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._engine:
+            self._engine.stop()
+
+
+app = Flask(__name__)
+monitor_service = MonitorService()
+
+
+def get_config() -> AppConfig:
+    if config_path().exists():
+        return load_config()
+    return AppConfig()
+
+
+@app.route("/")
+def root() -> str:
+    if config_path().exists():
+        return redirect(url_for("dashboard"))
+    return redirect(url_for("setup"))
+
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup() -> str:
+    config = get_config()
+    if request.method == "POST":
+        config.subject = request.form.get("subject", "Impactful Events").strip() or "Impactful Events"
+        config.location_name = request.form.get("location_name", "Your Area").strip() or "Your Area"
+        config.zip_code = request.form.get("zip_code") or None
+        lat_val = request.form.get("latitude", "").strip()
+        lon_val = request.form.get("longitude", "").strip()
+        config.latitude = float(lat_val) if lat_val else None
+        config.longitude = float(lon_val) if lon_val else None
+        radius_val = request.form.get("radius_km", "50").strip()
+        config.radius_km = int(radius_val) if radius_val else 50
+        rss_raw = request.form.get("rss_feeds", "")
+        config.rss_feeds = [line.strip() for line in rss_raw.splitlines() if line.strip()]
+        config.news_api_key = request.form.get("news_api_key") or None
+        save_config(config)
+        monitor_service.stop()
+        monitor_service.start(config)
+        return redirect(url_for("dashboard"))
+    return render_template_string(SETUP_TEMPLATE, config=config)
+
+
+@app.route("/dashboard")
+def dashboard() -> str:
+    config = get_config()
+    if not config_path().exists():
+        return redirect(url_for("setup"))
+    if config and config_path().exists():
+        monitor_service.start(config)
+    return render_template_string(
+        DASHBOARD_TEMPLATE,
+        subject=config.subject,
+        location=config.location_name,
+    )
+
+
+@app.route("/api/alerts")
+def api_alerts() -> str:
+    alerts = []
+    for row in database.fetch_recent(200):
+        alerts.append(
+            {
+                "url": row["url"],
+                "title": row["title"],
+                "snippet": row["snippet"],
+                "published_at": row["published_at"],
+                "source": row["source"],
+                "impact_score": row["impact_score"],
+                "predictive_outcome": row["predictive_outcome"],
+                "is_relevant": bool(row["is_relevant"]),
+                "created_at": row["created_at"],
+            }
+        )
+    return jsonify({"alerts": alerts})
+
+
+def main() -> None:
+    database.init_db()
+    config = get_config()
+    if config_path().exists():
+        monitor_service.start(config)
+    url = "http://127.0.0.1:8765"
+    webbrowser.open(url)
+    app.run(host="127.0.0.1", port=8765, debug=False)
+
+
+if __name__ == "__main__":
+    main()

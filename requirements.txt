@@ -6,3 +6,4 @@ httpx
 feedparser
 pyinstaller
 pgeocode
+flask
