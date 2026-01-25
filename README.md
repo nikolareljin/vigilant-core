@@ -78,8 +78,9 @@ If you provide no RSS feeds or API keys, VigilantCore will still:
 BBC News, The Guardian, Al Jazeera, DW, France 24, NHK World, ABC News (AU), CBC, CNN, NBC News, CBS News, ABC News (US), Fox News, USA Today, NPR, Axios, Politico, The Washington Post, Financial Times, Bloomberg, The Economist, Reuters, AP News, Sky News, The Times of India, The Hindu, Japan Times, Sydney Morning Herald, The Globe and Mail, The Straits Times.
 
 ## Helper Scripts (script-helpers)
-This repo uses the shared `script-helpers` library like other projects in this workspace.
-Initialize submodules once before using `./scripts/*.sh`:
+This repo can use the shared `script-helpers` library like other projects in this workspace.
+If the submodule is not present (e.g., CI), scripts fall back to minimal logging.
+To use full helpers locally, initialize submodules once:
 ```bash
 ./update
 ```

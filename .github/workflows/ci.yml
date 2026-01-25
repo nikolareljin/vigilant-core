@@ -15,4 +15,3 @@ jobs:
       lint_command: "python -m pip install -r requirements.txt && python -m pip install ruff && ruff check ."
       test_command: "bash scripts/test.sh"
       build_command: "bash scripts/build.sh"
-      extra_command: "git submodule update --init --recursive"
