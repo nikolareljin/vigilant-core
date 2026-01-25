@@ -15,7 +15,12 @@ import pgeocode
 from .parser import ImpactParser
 from utils import database
 from utils.config import AppConfig
-from utils.sources import ensure_seed_feeds
+from utils.sources import (
+    build_local_feeds,
+    build_social_feeds,
+    discover_local_source_feeds,
+    ensure_seed_feeds,
+)
 
 
 @dataclass
@@ -37,6 +42,8 @@ class MonitorEngine:
         self.on_new_alert = on_new_alert
         self._stop_event = asyncio.Event()
         self._geo = pgeocode.Nominatim("us")
+        self._local_source_feeds: Optional[List[str]] = None
+        self._social_feeds: Optional[List[str]] = None
         location_context = self._location_context()
         self._parser = ImpactParser(
             config.subject,
@@ -47,6 +54,8 @@ class MonitorEngine:
         self.model_name = self._parser.current_model()
 
     def _location_context(self) -> str:
+        if self.config.relax_location_filter:
+            return "Global"
         parts = [self.config.location_name]
         if self.config.zip_code:
             parts.append(f"ZIP {self.config.zip_code}")
@@ -55,6 +64,20 @@ class MonitorEngine:
         if self.config.radius_km:
             parts.append(f"within {self.config.radius_km}km")
         return " | ".join(p for p in parts if p)
+
+    def _get_local_source_feeds(self) -> List[str]:
+        if self._local_source_feeds is None:
+            self._local_source_feeds = discover_local_source_feeds(
+                self.config.location_name, self.config.zip_code
+            )
+        return self._local_source_feeds
+
+    def _get_social_feeds(self) -> List[str]:
+        if self._social_feeds is None:
+            self._social_feeds = build_social_feeds(
+                self.config.subject, self.config.location_name, self.config.zip_code
+            )
+        return self._social_feeds
 
     def _get_center_coords(self) -> Optional[tuple[float, float]]:
         if self.config.latitude is not None and self.config.longitude is not None:
@@ -102,6 +125,8 @@ class MonitorEngine:
         return [kw for kw in keywords if kw]
 
     def _matches_location(self, item: AlertItem) -> bool:
+        if self.config.relax_location_filter:
+            return True
         keywords = self._location_keywords()
         center = self._get_center_coords()
         if center:
@@ -146,13 +171,7 @@ class MonitorEngine:
         items: List[AlertItem] = []
         if not self.config.news_api_key:
             return items
-        query = self.config.subject
-        if self.config.location_name:
-            query = f"{query} {self.config.location_name}"
-        if self.config.zip_code:
-            query = f"{query} {self.config.zip_code}"
-        if self.config.latitude is not None and self.config.longitude is not None:
-            query = f"{query} {self.config.latitude},{self.config.longitude}"
+        query = self._build_search_query()
         url = "https://newsapi.org/v2/everything"
         params = {
             "q": query,
@@ -183,16 +202,153 @@ class MonitorEngine:
             )
         return items
 
+    def _build_search_query(self) -> str:
+        query = self.config.subject
+        if self.config.location_name:
+            query = f"{query} {self.config.location_name}"
+        if self.config.zip_code:
+            query = f"{query} {self.config.zip_code}"
+        if self.config.latitude is not None and self.config.longitude is not None:
+            query = f"{query} {self.config.latitude},{self.config.longitude}"
+        return query.strip()
+
+    async def fetch_google_cse_items(self) -> List[AlertItem]:
+        items: List[AlertItem] = []
+        if not self.config.google_cse_api_key or not self.config.google_cse_cx:
+            return items
+        query = self._build_search_query()
+        if not query:
+            return items
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": self.config.google_cse_api_key,
+            "cx": self.config.google_cse_cx,
+            "q": query,
+            "num": 10,
+        }
+        async with httpx.AsyncClient(timeout=20) as client:
+            try:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                payload = resp.json()
+            except Exception:
+                return items
+        for entry in payload.get("items", []) or []:
+            link = entry.get("link")
+            if not link:
+                continue
+            items.append(
+                AlertItem(
+                    url=link,
+                    title=entry.get("title") or "(no title)",
+                    snippet=entry.get("snippet") or "",
+                    published_at=None,
+                    source="Google CSE",
+                )
+            )
+        return items
+
+    async def fetch_bing_items(self) -> List[AlertItem]:
+        items: List[AlertItem] = []
+        if not self.config.bing_search_key:
+            return items
+        query = self._build_search_query()
+        if not query:
+            return items
+        endpoint = self.config.bing_search_endpoint or "https://api.bing.microsoft.com/v7.0/search"
+        params = {
+            "q": query,
+            "count": 20,
+            "mkt": self.config.bing_search_market or "en-US",
+            "safeSearch": self.config.bing_search_safe or "Moderate",
+        }
+        headers = {"Ocp-Apim-Subscription-Key": self.config.bing_search_key}
+        async with httpx.AsyncClient(timeout=20) as client:
+            try:
+                resp = await client.get(endpoint, params=params, headers=headers)
+                resp.raise_for_status()
+                payload = resp.json()
+            except Exception:
+                return items
+        for entry in payload.get("webPages", {}).get("value", []) or []:
+            link = entry.get("url")
+            if not link:
+                continue
+            items.append(
+                AlertItem(
+                    url=link,
+                    title=entry.get("name") or "(no title)",
+                    snippet=entry.get("snippet") or "",
+                    published_at=None,
+                    source="Bing Search",
+                )
+            )
+        return items
+
+    async def fetch_x_items(self) -> List[AlertItem]:
+        items: List[AlertItem] = []
+        if not self.config.x_api_bearer:
+            return items
+        query = self._build_search_query()
+        if not query:
+            return items
+        url = "https://api.x.com/2/tweets/search/recent"
+        params = {"query": query, "max_results": 10, "tweet.fields": "created_at"}
+        headers = {"Authorization": f"Bearer {self.config.x_api_bearer}"}
+        async with httpx.AsyncClient(timeout=20) as client:
+            try:
+                resp = await client.get(url, params=params, headers=headers)
+                resp.raise_for_status()
+                payload = resp.json()
+            except Exception:
+                return items
+        for tweet in payload.get("data", []) or []:
+            tweet_id = tweet.get("id")
+            text = tweet.get("text") or ""
+            if not tweet_id or not text:
+                continue
+            items.append(
+                AlertItem(
+                    url=f"https://x.com/i/web/status/{tweet_id}",
+                    title=(text[:77] + "...") if len(text) > 80 else text,
+                    snippet=text,
+                    published_at=tweet.get("created_at"),
+                    source="X",
+                )
+            )
+        return items
+
     async def gather_items(self) -> List[AlertItem]:
         feed_urls = ensure_seed_feeds(self.config.rss_feeds)
+        local_feeds = build_local_feeds(self.config.location_name, self.config.zip_code)
+        if local_feeds:
+            for feed in local_feeds:
+                if feed not in feed_urls:
+                    feed_urls.append(feed)
+        local_source_feeds = self._get_local_source_feeds()
+        if local_source_feeds:
+            for feed in local_source_feeds:
+                if feed not in feed_urls:
+                    feed_urls.append(feed)
+        social_feeds = self._get_social_feeds()
+        if social_feeds:
+            for feed in social_feeds:
+                if feed not in feed_urls:
+                    feed_urls.append(feed)
         google_news_feed = self._build_google_news_feed()
         if google_news_feed and google_news_feed not in feed_urls:
             feed_urls = feed_urls + [google_news_feed]
         self.config.rss_feeds = feed_urls
-        rss_items, api_items = await asyncio.gather(
-            self.fetch_rss_items(feed_urls), self.fetch_news_api_items()
+        results = await asyncio.gather(
+            self.fetch_rss_items(feed_urls),
+            self.fetch_news_api_items(),
+            self.fetch_google_cse_items(),
+            self.fetch_bing_items(),
+            self.fetch_x_items(),
         )
-        combined = rss_items + api_items
+        combined = []
+        for group in results:
+            combined.extend(group)
         seen = set()
         unique_items = []
         for item in combined:

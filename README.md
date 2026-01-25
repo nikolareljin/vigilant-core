@@ -73,9 +73,55 @@ If you provide no RSS feeds or API keys, VigilantCore will still:
 - Auto-detect your city/region + ZIP + coordinates (best effort).
 - Seed from **30 curated global sources** and discover RSS/Atom feeds.
 - Add a Google News RSS query built from your subject + location for broader coverage.
+- Add local public-safety queries (police, sheriff, fire, emergency management).
+- Attempt to discover local police/government and local news RSS feeds near your location.
+- Pull social chatter via Reddit search RSS tied to your subject and location.
 
-### Curated Global Sources (Initial 30)
-BBC News, The Guardian, Al Jazeera, DW, France 24, NHK World, ABC News (AU), CBC, CNN, NBC News, CBS News, ABC News (US), Fox News, USA Today, NPR, Axios, Politico, The Washington Post, Financial Times, Bloomberg, The Economist, Reuters, AP News, Sky News, The Times of India, The Hindu, Japan Times, Sydney Morning Herald, The Globe and Mail, The Straits Times.
+## Optional Search API Keys (Better Coverage)
+If you set any of the API keys below, VigilantCore will use them automatically. If not set, it falls back to RSS and the built-in discovery.
+
+### Google Programmable Search Engine (CSE)
+1. Create a Custom Search Engine: https://programmablesearchengine.google.com/
+2. Enable the Custom Search JSON API and create an API key:
+   https://developers.google.com/custom-search/v1/overview
+3. Set these variables (use `.env` in the app config dir or environment):
+```bash
+GOOGLE_CSE_API_KEY=your_key
+GOOGLE_CSE_CX=your_search_engine_id
+```
+
+### Bing Web Search API
+1. Create a Bing Search v7 resource in Azure:
+   https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/create-bing-search-service-resource
+2. Set:
+```bash
+BING_SEARCH_KEY=your_key
+# Optional overrides
+BING_SEARCH_ENDPOINT=https://api.bing.microsoft.com/v7.0/search
+BING_SEARCH_MARKET=en-US
+BING_SEARCH_SAFE=Moderate
+```
+
+### X (Twitter) API v2
+1. Apply for a developer account and create an app:
+   https://developer.x.com/
+2. Create a Bearer Token and set:
+```bash
+X_API_BEARER=your_bearer_token
+```
+Note: Recent Search requires an access tier that supports it.
+
+### Facebook & Instagram (Meta Graph API)
+Meta does not provide a general public search API. Access typically requires:
+- A Meta app with approved permissions
+- A specific Page/IG Business account context
+If you have a Page or IG Business and want targeted ingestion, open an issue and we can add a provider for specific page IDs.
+
+### Snapchat
+Snapchat does not provide a public search API for general content. If you have a partner integration, let us know and we can add it.
+
+### Curated Global Sources (Expanded)
+The default list now includes major US, European, East European, Chinese, Australian, South American, and African outlets. See `vigilant-core/utils/sources.py` for the full list.
 
 ## Helper Scripts (script-helpers)
 This repo can use the shared `script-helpers` library like other projects in this workspace.

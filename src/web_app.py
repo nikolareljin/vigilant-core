@@ -200,6 +200,12 @@ SETUP_TEMPLATE = """
     <label>Radius (km)</label>
     <input name="radius_km" value="{{ config.radius_km }}" placeholder="50" />
 
+    <label>Relax location filter</label>
+    <select name="relax_location_filter">
+      <option value="no" {% if not config.relax_location_filter %}selected{% endif %}>No (default)</option>
+      <option value="yes" {% if config.relax_location_filter %}selected{% endif %}>Yes (show broader results)</option>
+    </select>
+
     <label>RSS Feeds (auto-filled, optional)</label>
     <textarea name="rss_feeds" rows="4" placeholder="Auto-filled from major sources">{{ '\n'.join(config.rss_feeds) }}</textarea>
 
@@ -267,7 +273,7 @@ def setup() -> str:
     config = get_config()
     if request.method == "POST":
         config.subject = request.form.get("subject", "Impactful Events").strip() or "Impactful Events"
-        config.location_name = request.form.get("location_name", "Your Area").strip() or "Your Area"
+        config.location_name = request.form.get("location_name", "").strip()
         config.question = request.form.get("question", "").strip()
         config.prefer_light_model = request.form.get("prefer_light_model", "yes") == "yes"
         config.zip_code = request.form.get("zip_code") or None
@@ -277,6 +283,9 @@ def setup() -> str:
         config.longitude = float(lon_val) if lon_val else None
         radius_val = request.form.get("radius_km", "50").strip()
         config.radius_km = int(radius_val) if radius_val else 50
+        config.relax_location_filter = (
+            request.form.get("relax_location_filter", "no") == "yes"
+        )
         rss_raw = request.form.get("rss_feeds", "")
         config.rss_feeds = [line.strip() for line in rss_raw.splitlines() if line.strip()]
         config.news_api_key = request.form.get("news_api_key") or None

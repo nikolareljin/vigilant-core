@@ -23,10 +23,18 @@ class AppConfig:
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     radius_km: int = 50
+    relax_location_filter: bool = False
     prefer_light_model: bool = True
     rss_feeds: List[str] = field(default_factory=list)
     polling_minutes: int = 15
     news_api_key: Optional[str] = None
+    google_cse_api_key: Optional[str] = None
+    google_cse_cx: Optional[str] = None
+    bing_search_key: Optional[str] = None
+    bing_search_endpoint: Optional[str] = None
+    bing_search_market: Optional[str] = None
+    bing_search_safe: Optional[str] = None
+    x_api_bearer: Optional[str] = None
 
 
 def config_dir() -> Path:
@@ -60,8 +68,19 @@ def env_path() -> Path:
 def load_config() -> AppConfig:
     cfg_path = config_path()
     if not cfg_path.exists():
-        return AppConfig()
+        load_dotenv(env_path())
+        cfg = AppConfig()
+        cfg.news_api_key = os.getenv("NEWS_API_KEY")
+        cfg.google_cse_api_key = os.getenv("GOOGLE_CSE_API_KEY")
+        cfg.google_cse_cx = os.getenv("GOOGLE_CSE_CX")
+        cfg.bing_search_key = os.getenv("BING_SEARCH_KEY")
+        cfg.bing_search_endpoint = os.getenv("BING_SEARCH_ENDPOINT")
+        cfg.bing_search_market = os.getenv("BING_SEARCH_MARKET")
+        cfg.bing_search_safe = os.getenv("BING_SEARCH_SAFE")
+        cfg.x_api_bearer = os.getenv("X_API_BEARER")
+        return cfg
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
+    load_dotenv(env_path())
     cfg = AppConfig(
         subject=data.get("subject", "Impactful Events"),
         question=data.get("question", ""),
@@ -70,13 +89,27 @@ def load_config() -> AppConfig:
         latitude=data.get("latitude"),
         longitude=data.get("longitude"),
         radius_km=int(data.get("radius_km", 50)),
+        relax_location_filter=bool(data.get("relax_location_filter", False)),
         prefer_light_model=bool(data.get("prefer_light_model", True)),
         rss_feeds=data.get("rss_feeds", []),
         polling_minutes=int(data.get("polling_minutes", 15)),
         news_api_key=data.get("news_api_key"),
+        google_cse_api_key=data.get("google_cse_api_key"),
+        google_cse_cx=data.get("google_cse_cx"),
+        bing_search_key=data.get("bing_search_key"),
+        bing_search_endpoint=data.get("bing_search_endpoint"),
+        bing_search_market=data.get("bing_search_market"),
+        bing_search_safe=data.get("bing_search_safe"),
+        x_api_bearer=data.get("x_api_bearer"),
     )
-    load_dotenv(env_path())
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
+    cfg.google_cse_api_key = cfg.google_cse_api_key or os.getenv("GOOGLE_CSE_API_KEY")
+    cfg.google_cse_cx = cfg.google_cse_cx or os.getenv("GOOGLE_CSE_CX")
+    cfg.bing_search_key = cfg.bing_search_key or os.getenv("BING_SEARCH_KEY")
+    cfg.bing_search_endpoint = cfg.bing_search_endpoint or os.getenv("BING_SEARCH_ENDPOINT")
+    cfg.bing_search_market = cfg.bing_search_market or os.getenv("BING_SEARCH_MARKET")
+    cfg.bing_search_safe = cfg.bing_search_safe or os.getenv("BING_SEARCH_SAFE")
+    cfg.x_api_bearer = cfg.x_api_bearer or os.getenv("X_API_BEARER")
     return cfg
 
 
@@ -91,6 +124,7 @@ def save_config(config: AppConfig) -> None:
         "latitude": config.latitude,
         "longitude": config.longitude,
         "radius_km": config.radius_km,
+        "relax_location_filter": config.relax_location_filter,
         "prefer_light_model": config.prefer_light_model,
         "rss_feeds": config.rss_feeds,
         "polling_minutes": config.polling_minutes,

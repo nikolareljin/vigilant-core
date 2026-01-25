@@ -31,6 +31,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.lat_input = QtWidgets.QLineEdit()
         self.lon_input = QtWidgets.QLineEdit()
         self.radius_input = QtWidgets.QLineEdit()
+        self.relax_location_checkbox = QtWidgets.QCheckBox("Relax location filter")
         self.rss_input = QtWidgets.QPlainTextEdit()
         self.api_input = QtWidgets.QLineEdit()
         self.api_input.setEchoMode(QtWidgets.QLineEdit.Password)
@@ -42,6 +43,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.lat_input.setToolTip("Optional latitude for precise location filtering.")
         self.lon_input.setToolTip("Optional longitude for precise location filtering.")
         self.radius_input.setToolTip("Radius in kilometers for local matching (default 50).")
+        self.relax_location_checkbox.setToolTip("Show results even if they don't mention the location.")
         self.rss_input.setToolTip("Paste RSS feed URLs, one per line.")
         self.api_input.setToolTip("News API key for broader coverage (kept locally).")
 
@@ -54,6 +56,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         form.addRow("Latitude", self.lat_input)
         form.addRow("Longitude", self.lon_input)
         form.addRow("Radius (km)", self.radius_input)
+        form.addRow("", self.relax_location_checkbox)
         form.addRow("RSS Feeds (one per line)", self.rss_input)
         form.addRow("News API Key", self.api_input)
 
@@ -79,11 +82,12 @@ class FirstRunDialog(QtWidgets.QDialog):
         return AppConfig(
             subject=self.subject_input.text().strip() or "Impactful Events",
             question=self.question_input.text().strip(),
-            location_name=self.location_input.text().strip() or "Your Area",
+            location_name=self.location_input.text().strip(),
             zip_code=self.zip_input.text().strip() or None,
             latitude=lat,
             longitude=lon,
             radius_km=radius,
+            relax_location_filter=self.relax_location_checkbox.isChecked(),
             prefer_light_model=self.light_model_checkbox.isChecked(),
             rss_feeds=rss_list,
             news_api_key=self.api_input.text().strip() or None,
@@ -247,6 +251,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.config.longitude is not None:
             dialog.lon_input.setText(str(self.config.longitude))
         dialog.radius_input.setText(str(self.config.radius_km))
+        dialog.relax_location_checkbox.setChecked(self.config.relax_location_filter)
         if self.config.rss_feeds:
             dialog.rss_input.setPlainText("\n".join(self.config.rss_feeds))
         if self.config.news_api_key:
