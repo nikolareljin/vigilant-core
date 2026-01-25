@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
+
+echo "Synchronizing submodule URLs..."
+git submodule sync --recursive
+
+echo "Updating submodules (fetching latest remote commits)..."
+if ! git submodule update --init --remote --recursive; then
+  echo "Remote submodule update failed. Falling back to pinned revisions..."
+  git submodule update --init --recursive
+fi
+
+echo "Submodules are up to date."
