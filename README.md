@@ -126,9 +126,6 @@ Meta does not provide a general public search API. Access typically requires:
 - A specific Page/IG Business account context
 If you have a Page or IG Business and want targeted ingestion, open an issue and we can add a provider for specific page IDs.
 
-### Snapchat
-Snapchat does not provide a public search API for general content. If you have a partner integration, let us know and we can add it.
-
 ### Curated Global Sources (Expanded)
 The default list now includes major US, European, East European, Chinese, Australian, South American, and African outlets. See `vigilant-core/utils/sources.py` for the full list.
 
