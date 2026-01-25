@@ -69,13 +69,24 @@ class ImpactParser:
         if self._client is None:
             return
         try:
-            models = self._client.list().get("models", [])
+            resp = self._client.list()
+            # Handle both dict (old API) and Pydantic object (new API)
+            if hasattr(resp, "models"):
+                models = resp.models
+            else:
+                models = resp.get("models", [])
             logger.info("Ollama models available: %d", len(models))
         except Exception:
             logger.exception("Failed to list Ollama models; disabling LLM parsing")
             self._client = None
             return
-        available = {model.get("name") for model in models if model.get("name")}
+        # Extract model names - handle both dict and Pydantic objects
+        available = set()
+        for model in models:
+            if hasattr(model, "model"):
+                available.add(model.model)
+            elif isinstance(model, dict) and model.get("name"):
+                available.add(model.get("name"))
         if self.model in available:
             return
         try:

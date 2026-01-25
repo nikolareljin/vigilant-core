@@ -580,9 +580,9 @@ class MonitorEngine:
             if not self.config.disable_rss_fetch:
                 tasks.insert(0, self.fetch_rss_items(feed_urls))
             results = await asyncio.gather(*tasks)
-        combined = []
-        for group in results:
-            combined.extend(group)
+            combined = []
+            for group in results:
+                combined.extend(group)
         logger.info("Fetched %d raw items before filtering", len(combined))
         seen = set()
         unique_items = []

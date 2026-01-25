@@ -314,6 +314,9 @@ def _is_ignored_domain(url: str) -> bool:
 def _extract_ddg_url(href: str) -> Optional[str]:
     if not href:
         return None
+    # Handle protocol-relative URLs (e.g., //duckduckgo.com/l/...)
+    if href.startswith("//"):
+        href = "https:" + href
     if href.startswith("http"):
         parsed = urlparse(href)
         if parsed.netloc.endswith("duckduckgo.com") and parsed.path.startswith("/l/"):
