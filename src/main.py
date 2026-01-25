@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, List
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from engine.monitor import MonitorEngine
-from utils import database
-from utils.config import AppConfig, config_path, load_config, save_config
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from engine.monitor import MonitorEngine  # noqa: E402
+from utils import database  # noqa: E402
+from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
 
 
 class FirstRunDialog(QtWidgets.QDialog):
@@ -20,6 +25,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.setMinimumWidth(520)
 
         self.subject_input = QtWidgets.QLineEdit()
+        self.question_input = QtWidgets.QLineEdit()
         self.location_input = QtWidgets.QLineEdit()
         self.zip_input = QtWidgets.QLineEdit()
         self.lat_input = QtWidgets.QLineEdit()
@@ -29,6 +35,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.api_input = QtWidgets.QLineEdit()
         self.api_input.setEchoMode(QtWidgets.QLineEdit.Password)
         self.subject_input.setToolTip("What you want to monitor (e.g., weather alerts).")
+        self.question_input.setToolTip("Optional question to guide the AI focus.")
         self.location_input.setToolTip("City/region name used for local relevance.")
         self.zip_input.setToolTip("ZIP code for local filtering and geocoding.")
         self.lat_input.setToolTip("Optional latitude for precise location filtering.")
@@ -39,6 +46,7 @@ class FirstRunDialog(QtWidgets.QDialog):
 
         form = QtWidgets.QFormLayout()
         form.addRow("Subject", self.subject_input)
+        form.addRow("Monitoring Question (optional)", self.question_input)
         form.addRow("Location", self.location_input)
         form.addRow("ZIP Code", self.zip_input)
         form.addRow("Latitude", self.lat_input)
@@ -68,6 +76,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         radius = int(self.radius_input.text()) if self.radius_input.text().strip() else 50
         return AppConfig(
             subject=self.subject_input.text().strip() or "Impactful Events",
+            question=self.question_input.text().strip(),
             location_name=self.location_input.text().strip() or "Your Area",
             zip_code=self.zip_input.text().strip() or None,
             latitude=lat,
@@ -216,6 +225,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def edit_config(self) -> None:
         dialog = FirstRunDialog(self)
         dialog.subject_input.setText(self.config.subject)
+        dialog.question_input.setText(self.config.question)
         dialog.location_input.setText(self.config.location_name)
         if self.config.zip_code:
             dialog.zip_input.setText(self.config.zip_code)

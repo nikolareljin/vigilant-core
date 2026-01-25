@@ -52,11 +52,24 @@ This will:
 ## Web Dashboard (Browser)
 The local browser page prompts for:
 - **Event/Subject**
+- **Monitoring Question (optional)**
 - **Location / ZIP / GPS**
 - **Radius (km)**
 
 You can reopen the same page any time by visiting:
 `http://127.0.0.1:8765`
+
+Additional data view:
+`http://127.0.0.1:8765/data`
+
+## Zero-Input Discovery
+If you provide no RSS feeds or API keys, VigilantCore will still:
+- Auto-detect your city/region + ZIP + coordinates (best effort).
+- Seed from **30 curated global sources** and discover RSS/Atom feeds.
+- Add a Google News RSS query built from your subject + location for broader coverage.
+
+### Curated Global Sources (Initial 30)
+BBC News, The Guardian, Al Jazeera, DW, France 24, NHK World, ABC News (AU), CBC, CNN, NBC News, CBS News, ABC News (US), Fox News, USA Today, NPR, Axios, Politico, The Washington Post, Financial Times, Bloomberg, The Economist, Reuters, AP News, Sky News, The Times of India, The Hindu, Japan Times, Sydney Morning Herald, The Globe and Mail, The Straits Times.
 
 ## Helper Scripts (script-helpers)
 This repo uses the shared `script-helpers` library like other projects in this workspace.

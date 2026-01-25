@@ -19,4 +19,4 @@ if (-not (Test-Path "venv")) {
 & .\venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-python src\main.py
+python -m src.web_app

@@ -117,7 +117,7 @@ def fetch_recent(limit: int = 200) -> List[sqlite3.Row]:
                    impact_score, predictive_outcome, is_relevant, subject, location_name,
                    created_at
             FROM alerts
-            ORDER BY created_at DESC
+            ORDER BY impact_score DESC, created_at DESC
             LIMIT ?
             """,
             (limit,),

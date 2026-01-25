@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.dist-info/
+
+# Virtual environments
+venv/
+.venv/
+
+# Packaging
+build/
+dist/
+*.spec
+
+# Logs & caches
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# App data
+*.db
+*.sqlite
+
+# Local config
+.env
+.env.*
+config.json
+
+# Node (if ever added)
+node_modules/

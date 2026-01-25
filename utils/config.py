@@ -17,6 +17,7 @@ APP_NAME = "VigilantCore"
 @dataclass
 class AppConfig:
     subject: str = "Impactful Events"
+    question: str = ""
     location_name: str = "Your Area"
     zip_code: Optional[str] = None
     latitude: Optional[float] = None
@@ -62,6 +63,7 @@ def load_config() -> AppConfig:
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
     cfg = AppConfig(
         subject=data.get("subject", "Impactful Events"),
+        question=data.get("question", ""),
         location_name=data.get("location_name", "Your Area"),
         zip_code=data.get("zip_code"),
         latitude=data.get("latitude"),
@@ -81,6 +83,7 @@ def save_config(config: AppConfig) -> None:
     cfg_dir.mkdir(parents=True, exist_ok=True)
     data = {
         "subject": config.subject,
+        "question": config.question,
         "location_name": config.location_name,
         "zip_code": config.zip_code,
         "latitude": config.latitude,

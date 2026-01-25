@@ -15,6 +15,7 @@ import pgeocode
 from .parser import ImpactParser
 from utils import database
 from utils.config import AppConfig
+from utils.sources import ensure_seed_feeds
 
 
 @dataclass
@@ -37,7 +38,7 @@ class MonitorEngine:
         self._stop_event = asyncio.Event()
         self._geo = pgeocode.Nominatim("us")
         location_context = self._location_context()
-        self._parser = ImpactParser(config.subject, location_context)
+        self._parser = ImpactParser(config.subject, location_context, config.question)
 
     def _location_context(self) -> str:
         parts = [self.config.location_name]
@@ -108,12 +109,11 @@ class MonitorEngine:
         haystack = f"{item.title} {item.snippet}".lower()
         return any(kw in haystack for kw in keywords)
 
-    async def fetch_rss_items(self) -> List[AlertItem]:
+    async def fetch_rss_items(self, feed_urls: Optional[List[str]] = None) -> List[AlertItem]:
         items: List[AlertItem] = []
-        if not self.config.rss_feeds:
-            return items
+        feed_urls = feed_urls or ensure_seed_feeds(self.config.rss_feeds)
         async with httpx.AsyncClient(timeout=20) as client:
-            for feed_url in self.config.rss_feeds:
+            for feed_url in feed_urls:
                 try:
                     resp = await client.get(feed_url)
                     resp.raise_for_status()
@@ -178,8 +178,13 @@ class MonitorEngine:
         return items
 
     async def gather_items(self) -> List[AlertItem]:
+        feed_urls = ensure_seed_feeds(self.config.rss_feeds)
+        google_news_feed = self._build_google_news_feed()
+        if google_news_feed and google_news_feed not in feed_urls:
+            feed_urls = feed_urls + [google_news_feed]
+        self.config.rss_feeds = feed_urls
         rss_items, api_items = await asyncio.gather(
-            self.fetch_rss_items(), self.fetch_news_api_items()
+            self.fetch_rss_items(feed_urls), self.fetch_news_api_items()
         )
         combined = rss_items + api_items
         seen = set()
@@ -192,6 +197,22 @@ class MonitorEngine:
             seen.add(item.url)
             unique_items.append(item)
         return unique_items
+
+    def _build_google_news_feed(self) -> Optional[str]:
+        query_parts = [self.config.subject]
+        if self.config.location_name:
+            query_parts.append(self.config.location_name)
+        if self.config.zip_code:
+            query_parts.append(self.config.zip_code)
+        if not any(query_parts):
+            return None
+        query = "+".join(
+            part.strip().replace(" ", "+") for part in query_parts if part.strip()
+        )
+        return (
+            "https://news.google.com/rss/search"
+            f"?q={query}&hl=en-US&gl=US&ceid=US:en"
+        )
 
     async def process_items(self, items: Iterable[AlertItem]) -> int:
         new_count = 0

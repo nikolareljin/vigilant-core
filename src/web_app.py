@@ -18,6 +18,8 @@ if str(ROOT_DIR) not in sys.path:
 from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
+from utils.geo import detect_geo  # noqa: E402
+from utils.sources import ensure_seed_feeds  # noqa: E402
 
 
 DASHBOARD_TEMPLATE = """
@@ -37,7 +39,7 @@ DASHBOARD_TEMPLATE = """
     th { background: #f0f2f8; }
     .score-high { color: #c0392b; font-weight: 600; }
     .score-mid { color: #d35400; }
-    .toolbar { margin-top: 12px; display: flex; gap: 12px; }
+    .toolbar { margin-top: 12px; display: flex; gap: 12px; align-items: center; }
     .button { padding: 8px 14px; background: #2f4bff; color: white; border-radius: 6px; text-decoration: none; }
     .button.secondary { background: #5f6b7a; }
   </style>
@@ -50,6 +52,7 @@ DASHBOARD_TEMPLATE = """
     </div>
     <div class="toolbar">
       <a class="button secondary" href="{{ url_for('setup') }}">Edit Settings</a>
+      <a class="button secondary" href="{{ url_for('data_view') }}">Data</a>
       <a class="button" href="/api/alerts" target="_blank">Raw JSON</a>
     </div>
   </header>
@@ -66,13 +69,20 @@ DASHBOARD_TEMPLATE = """
     </thead>
     <tbody id="feed"></tbody>
   </table>
+  <div class="toolbar">
+    <button class="button secondary" id="prevBtn">Previous 10</button>
+    <button class="button secondary" id="nextBtn">Next 10</button>
+    <span class="meta" id="pageLabel"></span>
+  </div>
 
 <script>
+let page = 1;
 async function loadFeed() {
-  const res = await fetch('/api/alerts');
+  const res = await fetch(`/api/alerts?page=${page}&limit=10`);
   const data = await res.json();
   const tbody = document.getElementById('feed');
   tbody.innerHTML = '';
+  document.getElementById('pageLabel').textContent = `Page ${data.page} of 2`;
   data.alerts.forEach(alert => {
     const tr = document.createElement('tr');
     const scoreClass = alert.impact_score >= 8 ? 'score-high' : (alert.impact_score >= 5 ? 'score-mid' : '');
@@ -90,11 +100,58 @@ async function loadFeed() {
 
 loadFeed();
 setInterval(loadFeed, 30000);
+
+document.getElementById('prevBtn').addEventListener('click', () => {
+  if (page > 1) {
+    page -= 1;
+    loadFeed();
+  }
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  if (page < 2) {
+    page += 1;
+    loadFeed();
+  }
+});
 </script>
 </body>
 </html>
 """
 
+DATA_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VigilantCore Data</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 24px; background: #f7f7fb; }
+    pre { background: #111827; color: #f9fafb; padding: 16px; border-radius: 8px; overflow: auto; }
+    .toolbar { margin-bottom: 16px; display: flex; gap: 10px; }
+    a { color: #2f4bff; text-decoration: none; }
+    .button { padding: 8px 14px; background: #2f4bff; color: white; border-radius: 6px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <a class="button" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+    <a class="button" href="{{ url_for('api_alerts') }}" target="_blank">Open JSON</a>
+  </div>
+  <h1>Latest Data</h1>
+  <pre id="json">Loading...</pre>
+
+  <script>
+    async function loadData() {
+      const res = await fetch('/api/alerts');
+      const data = await res.json();
+      document.getElementById('json').textContent = JSON.stringify(data, null, 2);
+    }
+    loadData();
+  </script>
+</body>
+</html>
+"""
 
 SETUP_TEMPLATE = """
 <!DOCTYPE html>
@@ -114,10 +171,13 @@ SETUP_TEMPLATE = """
 </head>
 <body>
   <h1>VigilantCore Setup</h1>
-  <p class="help">Enter your local area and what you want to track. You can edit later.</p>
+  <p class="help">Enter your local area and what you want to track. We auto-detect location when possible.</p>
   <form method="post">
     <label>Event / Subject</label>
     <input name="subject" value="{{ config.subject }}" placeholder="e.g., Weather Alerts" required />
+
+    <label>Monitoring Question (optional)</label>
+    <input name="question" value="{{ config.question }}" placeholder="e.g., Probability of electric outage?" />
 
     <label>Location Name</label>
     <input name="location_name" value="{{ config.location_name }}" placeholder="City, Region" />
@@ -134,10 +194,10 @@ SETUP_TEMPLATE = """
     <label>Radius (km)</label>
     <input name="radius_km" value="{{ config.radius_km }}" placeholder="50" />
 
-    <label>RSS Feeds (one per line)</label>
-    <textarea name="rss_feeds" rows="4" placeholder="https://...">{{ '\n'.join(config.rss_feeds) }}</textarea>
+    <label>RSS Feeds (auto-filled, optional)</label>
+    <textarea name="rss_feeds" rows="4" placeholder="Auto-filled from major sources">{{ '\n'.join(config.rss_feeds) }}</textarea>
 
-    <label>News API Key</label>
+    <label>News API Key (optional)</label>
     <input name="news_api_key" type="password" value="{{ config.news_api_key or '' }}" />
 
     <button type="submit">Save & Start</button>
@@ -175,7 +235,18 @@ monitor_service = MonitorService()
 def get_config() -> AppConfig:
     if config_path().exists():
         return load_config()
-    return AppConfig()
+    config = AppConfig()
+    geo = detect_geo()
+    if geo.city or geo.region:
+        config.location_name = ", ".join(
+            part for part in [geo.city, geo.region] if part
+        )
+    if geo.postal:
+        config.zip_code = geo.postal
+    if geo.latitude is not None and geo.longitude is not None:
+        config.latitude = geo.latitude
+        config.longitude = geo.longitude
+    return config
 
 
 @app.route("/")
@@ -191,6 +262,7 @@ def setup() -> str:
     if request.method == "POST":
         config.subject = request.form.get("subject", "Impactful Events").strip() or "Impactful Events"
         config.location_name = request.form.get("location_name", "Your Area").strip() or "Your Area"
+        config.question = request.form.get("question", "").strip()
         config.zip_code = request.form.get("zip_code") or None
         lat_val = request.form.get("latitude", "").strip()
         lon_val = request.form.get("longitude", "").strip()
@@ -201,6 +273,7 @@ def setup() -> str:
         rss_raw = request.form.get("rss_feeds", "")
         config.rss_feeds = [line.strip() for line in rss_raw.splitlines() if line.strip()]
         config.news_api_key = request.form.get("news_api_key") or None
+        config.rss_feeds = ensure_seed_feeds(config.rss_feeds)
         save_config(config)
         monitor_service.stop()
         monitor_service.start(config)
@@ -214,6 +287,9 @@ def dashboard() -> str:
     if not config_path().exists():
         return redirect(url_for("setup"))
     if config and config_path().exists():
+        if not config.rss_feeds:
+            config.rss_feeds = ensure_seed_feeds(config.rss_feeds)
+            save_config(config)
         monitor_service.start(config)
     return render_template_string(
         DASHBOARD_TEMPLATE,
@@ -224,8 +300,15 @@ def dashboard() -> str:
 
 @app.route("/api/alerts")
 def api_alerts() -> str:
+    page = int(request.args.get("page", "1"))
+    limit = int(request.args.get("limit", "10"))
+    if page < 1:
+        page = 1
+    if page > 2:
+        page = 2
+    offset = (page - 1) * limit
     alerts = []
-    for row in database.fetch_recent(200):
+    for row in database.fetch_recent(200)[offset:offset + limit]:
         alerts.append(
             {
                 "url": row["url"],
@@ -239,13 +322,21 @@ def api_alerts() -> str:
                 "created_at": row["created_at"],
             }
         )
-    return jsonify({"alerts": alerts})
+    return jsonify({"alerts": alerts, "page": page, "limit": limit})
+
+
+@app.route("/data")
+def data_view() -> str:
+    return render_template_string(DATA_TEMPLATE)
 
 
 def main() -> None:
     database.init_db()
     config = get_config()
     if config_path().exists():
+        if not config.rss_feeds:
+            config.rss_feeds = ensure_seed_feeds(config.rss_feeds)
+            save_config(config)
         monitor_service.start(config)
     url = "http://127.0.0.1:8765"
     webbrowser.open(url)

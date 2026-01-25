@@ -17,5 +17,5 @@ shlib_import logging
 print_info "No automated tests yet. Running smoke import check."
 cd "$ROOT_DIR"
 python -m pip install -r requirements.txt
-python -c "import engine.monitor, engine.parser, utils.database, utils.config; print('smoke ok')"
+python -c "import engine.monitor, engine.parser, utils.database, utils.config, utils.sources, utils.geo, src.web_app; print('smoke ok')"
 print_success "Smoke check complete."

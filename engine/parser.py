@@ -19,7 +19,9 @@ except Exception:  # pragma: no cover - optional dependency import guard
 SYSTEM_PROMPT_TEMPLATE = (
     "You are a selective intelligence agent. Only flag events that directly impact "
     "{subject} in {location}. If an event is a 'Watch' or 'Warning,' provide a 1-sentence "
-    "prediction of what happens next."
+    "prediction of what happens next. "
+    "If a monitoring question is provided, use it to judge relevance and prediction focus: "
+    "{question}"
 )
 
 
@@ -38,12 +40,14 @@ class ImpactParser:
         self,
         subject: str,
         location: str,
+        question: str = "",
         model: Optional[str] = None,
         ollama_host: Optional[str] = None,
     ) -> None:
         load_dotenv()
         self.subject = subject
         self.location = location
+        self.question = question
         self.model = model or os.getenv("OLLAMA_MODEL", "llama3.1:8b")
         self.ollama_host = ollama_host or os.getenv("OLLAMA_HOST")
         self._client = None
@@ -55,7 +59,10 @@ class ImpactParser:
             )
 
     def build_system_prompt(self) -> str:
-        return SYSTEM_PROMPT_TEMPLATE.format(subject=self.subject, location=self.location)
+        question = self.question.strip() or "None."
+        return SYSTEM_PROMPT_TEMPLATE.format(
+            subject=self.subject, location=self.location, question=question
+        )
 
     def _fallback_parse(self, headline: str, snippet: str) -> ParsedImpact:
         text = f"{headline} {snippet}".lower()
