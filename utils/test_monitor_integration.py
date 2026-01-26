@@ -25,7 +25,7 @@ async def test_monitor_engine_newsapi():
         print("   Please set NEWS_API_KEY environment variable or configure through the app")
         return
         
-    print(f"🔧 Testing MonitorEngine NewsAPI integration...")
+    print("🔧 Testing MonitorEngine NewsAPI integration...")
     print(f"   Search subject: {config.subject}")
     print(f"   Location: {config.location_name}")
     print(f"   Time window: {config.news_time_window_hours} hours")
@@ -37,11 +37,11 @@ async def test_monitor_engine_newsapi():
         # Fetch news items using the actual engine code
         items = await engine.fetch_news_api_items()
         
-        print(f"\n✅ MonitorEngine NewsAPI Test Results:")
+        print("\n✅ MonitorEngine NewsAPI Test Results:")
         print(f"   Items retrieved: {len(items)}")
         
         if items:
-            print(f"   Sample articles:")
+            print("   Sample articles:")
             for i, item in enumerate(items[:3]):
                 print(f"     {i+1}. {item.title}")
                 print(f"        Source: {item.source}")
