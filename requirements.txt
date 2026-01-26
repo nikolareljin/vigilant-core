@@ -1,5 +1,5 @@
 ollama
-crawl4ai
+crawl4ai==0.4.24
 pyside6
 python-dotenv
 httpx
