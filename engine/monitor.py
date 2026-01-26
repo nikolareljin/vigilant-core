@@ -20,11 +20,15 @@ from utils import database
 from utils.config import AppConfig, config_dir
 from utils.sources import (
     build_all_feeds,
+    build_comprehensive_local_feeds,
     build_local_feeds,
+    build_nws_weather_feeds,
     build_social_feeds,
     discover_local_source_feeds,
     ensure_seed_feeds,
+    get_state_from_zip,
     search_duckduckgo_results,
+    search_emergency_info,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,9 +176,24 @@ class MonitorEngine:
 
     def _get_local_source_feeds(self) -> List[str]:
         if self._local_source_feeds is None:
-            self._local_source_feeds = discover_local_source_feeds(
-                self.config.location_name, self.config.zip_code
-            )
+            # Use comprehensive local feeds when location info is available
+            if self.config.zip_code or (self.config.latitude and self.config.longitude):
+                self._local_source_feeds = build_comprehensive_local_feeds(
+                    subject=self.config.subject,
+                    location_name=self.config.location_name,
+                    zip_code=self.config.zip_code,
+                    latitude=self.config.latitude,
+                    longitude=self.config.longitude,
+                )
+                logger.info(
+                    "Discovered %d comprehensive local feeds for %s",
+                    len(self._local_source_feeds),
+                    self.config.location_name or self.config.zip_code,
+                )
+            else:
+                self._local_source_feeds = discover_local_source_feeds(
+                    self.config.location_name, self.config.zip_code
+                )
         return self._local_source_feeds
 
     def _get_social_feeds(self) -> List[str]:
@@ -480,6 +499,39 @@ class MonitorEngine:
             )
         return items
 
+    async def fetch_emergency_items(self) -> List[AlertItem]:
+        """Fetch emergency-related search results for the subject and location."""
+        items: List[AlertItem] = []
+
+        # Only run if we have location info
+        if not (self.config.zip_code or self.config.location_name):
+            return items
+
+        try:
+            results = search_emergency_info(
+                subject=self.config.subject,
+                location_name=self.config.location_name,
+                zip_code=self.config.zip_code,
+                latitude=self.config.latitude,
+                longitude=self.config.longitude,
+                max_results=20,
+            )
+            for result in results:
+                items.append(
+                    AlertItem(
+                        url=result.url,
+                        title=result.title,
+                        snippet=result.snippet,
+                        published_at=None,
+                        source="Emergency Search",
+                    )
+                )
+            logger.info("Found %d emergency-related results", len(items))
+        except Exception:
+            logger.exception("Failed to fetch emergency items")
+
+        return items
+
     async def fetch_google_cse_items(self) -> List[AlertItem]:
         items: List[AlertItem] = []
         if not self.config.google_cse_api_key or not self.config.google_cse_cx:
@@ -520,6 +572,16 @@ class MonitorEngine:
         feed_urls: List[str] = []
         if not self.config.disable_rss_fetch:
             feed_urls = list(self.config.rss_feeds)
+
+            # Add NWS weather alerts first (highest priority for location-based monitoring)
+            if self.config.zip_code or self.config.latitude:
+                state_abbrev = get_state_from_zip(self.config.zip_code) if self.config.zip_code else None
+                nws_feeds = build_nws_weather_feeds(self.config.zip_code, state_abbrev)
+                for feed in nws_feeds:
+                    if feed not in feed_urls:
+                        feed_urls.insert(0, feed)  # Add at the beginning for priority
+                logger.info("Added %d NWS weather feeds for location", len(nws_feeds))
+
             if not self.config.use_only_rss_feeds:
                 for feed in self._get_seed_feeds():
                     if feed not in feed_urls:
@@ -559,6 +621,10 @@ class MonitorEngine:
         if self.config.news_api_key:
             news_items = await self.fetch_news_api_items()
             combined = list(news_items)
+            # Always add emergency items when location is available
+            if self.config.zip_code or self.config.location_name:
+                emergency_items = await self.fetch_emergency_items()
+                combined.extend(emergency_items)
             if not combined:
                 tasks = [
                     self.fetch_google_cse_items(),
@@ -579,6 +645,9 @@ class MonitorEngine:
             ]
             if not self.config.disable_rss_fetch:
                 tasks.insert(0, self.fetch_rss_items(feed_urls))
+            # Add emergency search if location info is available
+            if self.config.zip_code or self.config.location_name:
+                tasks.append(self.fetch_emergency_items())
             results = await asyncio.gather(*tasks)
             combined = []
             for group in results:

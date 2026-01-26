@@ -6,6 +6,15 @@ All notable changes to VigilantCore will be documented in this file.
 
 ### Added
 
+- **Location-Based Emergency Services Discovery**: Automatic discovery of local emergency services, utilities, and weather alerts based on ZIP code or coordinates
+  - **NWS Weather Alerts**: State-specific National Weather Service CAP feeds automatically added
+  - **Emergency Services Search**: Automatic searches for local police, fire, EMS alerts
+  - **Utility Information**: Power outage maps, utility company alerts for the area
+  - **County/State Resources**: Local government emergency management feeds
+  - ZIP code to state mapping for all US states and territories
+  - Comprehensive local feed builder combining weather, emergency, and local news sources
+  - Emergency-specific search queries for subject + location context
+
 - **Monitoring Question Insight Feature**: AI-generated insights displayed above alerts list
   - Expandable insight card showing summary and detailed explanation
   - Configurable refresh interval (`insight_refresh_minutes` setting)
