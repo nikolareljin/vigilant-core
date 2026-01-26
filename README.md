@@ -58,7 +58,8 @@ VigilantCore prefers local signals by combining:
 - Keyword matching on location name and ZIP.
 
 ## Requirements
-- Python 3.10+
+- **Python 3.10+** (Linux/macOS)
+- **Python 3.10-3.12** (Windows - cannot exceed 3.12)
 - Git (for cloning/updating)
 - Ollama (automatically installed by quickstart scripts)
 
@@ -137,6 +138,7 @@ cd vigilant-core
 - All installations work without sudo
 
 **Windows:**
+- **Python 3.10-3.12 required** - Versions 3.13+ are not supported
 - Requires [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) for automatic Ollama installation
 - winget included with Windows 11 and Windows 10 (recent versions)
 - Alternative: Manual Ollama download from [ollama.com/download](https://ollama.com/download)
@@ -155,7 +157,8 @@ cd vigilant-core
 - You can cancel (Ctrl+C) and continue later with: `ollama pull llama3.2:1b`
 
 **"Python not found" or "Git not found"**
-- Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
+- **Windows:** Install Python 3.10-3.12 (not 3.13+) from [python.org](https://www.python.org/downloads/)
+- **Linux/macOS:** Install Python 3.10+ from your package manager or [python.org](https://www.python.org/downloads/)
 - Install Git from [git-scm.com](https://git-scm.com/downloads)
 - Ensure both are added to your system PATH
 

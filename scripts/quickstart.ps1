@@ -33,7 +33,7 @@ function Test-Command {
 # Check for Python
 if (-not (Test-Command python)) {
     Write-Host "ERROR: Python is required but not found in PATH." -ForegroundColor Red
-    Write-Host "Please install Python 3.10+ from https://www.python.org/downloads/" -ForegroundColor Yellow
+    Write-Host "Please install Python 3.12 from https://www.python.org/downloads/" -ForegroundColor Yellow
     exit 1
 }
 
@@ -42,8 +42,10 @@ $pythonVersion = python --version 2>&1 | Out-String
 if ($pythonVersion -match "Python (\d+)\.(\d+)") {
     $major = [int]$Matches[1]
     $minor = [int]$Matches[2]
-    if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 10)) {
-        Write-Host "ERROR: Python 3.10 or higher required. Found: $pythonVersion" -ForegroundColor Red
+    if ($major -ne 3 -or $minor -lt 10 -or $minor -gt 12) {
+        Write-Host "ERROR: Python 3.10-3.12 is required for Windows. Found: $pythonVersion" -ForegroundColor Red
+        Write-Host "Download Python 3.12 from https://www.python.org/downloads/" -ForegroundColor Yellow
+        Write-Host "Note: Python 3.13+ is not supported on Windows." -ForegroundColor Yellow
         exit 1
     }
 }

@@ -8,7 +8,8 @@ $Python = if ($env:PYTHON_BIN) { $env:PYTHON_BIN } else { "py" }
 try {
   & $Python -V | Out-Null
 } catch {
-  Write-Host "Python 3 is required. Please install Python 3.10+ and retry." -ForegroundColor Red
+  Write-Host "Python 3 is required. Please install Python 3.10-3.12 and retry." -ForegroundColor Red
+  Write-Host "Note: Python 3.13+ is not supported on Windows." -ForegroundColor Yellow
   exit 1
 }
 

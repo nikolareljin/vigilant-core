@@ -14,7 +14,8 @@ REM Check for Python
 where python >nul 2>&1
 if errorlevel 1 (
     echo Python is required but not found in PATH.
-    echo Please install Python 3.10+ from https://www.python.org/downloads/
+    echo Please install Python 3.10-3.12 from https://www.python.org/downloads/
+    echo Note: Python 3.13+ is not supported on Windows.
     exit /b 1
 )
 
