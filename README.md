@@ -87,7 +87,7 @@ Configure the dashboard:
 
 <img width="1920" height="3375" alt="image" src="https://github.com/user-attachments/assets/807bd2fc-3312-4066-aef6-e3114c4cac1c" />
 
-In the examples above, Princeton Palmer Square was used as the location. You can use your own location, ZIP code, address and longitude/latitude.
+In the examples above, public location was defined with Longitude/Latitude. You can use your own location, ZIP code, address and longitude/latitude.
 
 Open your browser to: **http://127.0.0.1:8765**
 
