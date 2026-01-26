@@ -102,6 +102,10 @@ Launch with `./run.sh qt` (or `run.bat qt` on Windows).
 
 <img width="616" height="742" alt="image" src="https://github.com/user-attachments/assets/ec3a8c6d-5c9b-409c-a63c-978680944faf" />
 
+Results view with the AI generated content:
+
+<img width="1100" height="735" alt="image" src="https://github.com/user-attachments/assets/83bbedc3-ecfa-4c91-b94b-26b8ccacb522" />
+
 
 ## Monitoring Question & AI Insights
 
