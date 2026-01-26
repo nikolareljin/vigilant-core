@@ -22,11 +22,9 @@ from utils.sources import (
     build_all_feeds,
     build_comprehensive_local_feeds,
     build_local_feeds,
-    build_nws_weather_feeds,
     build_social_feeds,
     discover_local_source_feeds,
     ensure_seed_feeds,
-    get_state_from_zip,
     search_duckduckgo_results,
     search_emergency_info,
 )
@@ -572,15 +570,6 @@ class MonitorEngine:
         feed_urls: List[str] = []
         if not self.config.disable_rss_fetch:
             feed_urls = list(self.config.rss_feeds)
-
-            # Add NWS weather alerts first (highest priority for location-based monitoring)
-            if self.config.zip_code or self.config.latitude:
-                state_abbrev = get_state_from_zip(self.config.zip_code) if self.config.zip_code else None
-                nws_feeds = build_nws_weather_feeds(self.config.zip_code, state_abbrev)
-                for feed in nws_feeds:
-                    if feed not in feed_urls:
-                        feed_urls.insert(0, feed)  # Add at the beginning for priority
-                logger.info("Added %d NWS weather feeds for location", len(nws_feeds))
 
             if not self.config.use_only_rss_feeds:
                 for feed in self._get_seed_feeds():

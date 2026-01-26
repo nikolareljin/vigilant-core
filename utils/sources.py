@@ -41,21 +41,28 @@ US_STATES: Dict[str, str] = {
     "PR": "Puerto Rico", "VI": "Virgin Islands", "GU": "Guam",
 }
 
-# ZIP code prefix to state mapping (first 3 digits)
+# ZIP code prefix to state mapping (first 3 digits) - Complete mapping
 ZIP_TO_STATE: Dict[str, str] = {
-    # Northeast
-    "006": "PR", "007": "PR", "008": "PR", "009": "PR",  # Puerto Rico
+    # Puerto Rico / Virgin Islands
+    "006": "PR", "007": "PR", "008": "PR", "009": "PR",
+    "008": "VI",  # Virgin Islands uses 008xx
+    # Massachusetts
     "010": "MA", "011": "MA", "012": "MA", "013": "MA", "014": "MA",
     "015": "MA", "016": "MA", "017": "MA", "018": "MA", "019": "MA",
     "020": "MA", "021": "MA", "022": "MA", "023": "MA", "024": "MA",
-    "025": "MA", "026": "MA", "027": "MA",
+    "025": "MA", "026": "MA", "027": "MA", "055": "MA",
+    # Rhode Island
     "028": "RI", "029": "RI",
-    "030": "NH", "031": "NH", "032": "NH", "033": "NH", "034": "NH",
-    "035": "VT", "036": "VT", "037": "VT", "038": "NH", "039": "ME",
-    "040": "ME", "041": "ME", "042": "ME", "043": "ME", "044": "ME",
-    "045": "ME", "046": "ME", "047": "ME", "048": "ME", "049": "ME",
+    # New Hampshire
+    "030": "NH", "031": "NH", "032": "NH", "033": "NH", "034": "NH", "038": "NH",
+    # Vermont
+    "035": "VT", "036": "VT", "037": "VT",
     "050": "VT", "051": "VT", "052": "VT", "053": "VT", "054": "VT",
-    "055": "MA", "056": "VT", "057": "VT", "058": "VT", "059": "VT",
+    "056": "VT", "057": "VT", "058": "VT", "059": "VT",
+    # Maine
+    "039": "ME", "040": "ME", "041": "ME", "042": "ME", "043": "ME", "044": "ME",
+    "045": "ME", "046": "ME", "047": "ME", "048": "ME", "049": "ME",
+    # Connecticut
     "060": "CT", "061": "CT", "062": "CT", "063": "CT", "064": "CT",
     "065": "CT", "066": "CT", "067": "CT", "068": "CT", "069": "CT",
     # New Jersey
@@ -63,6 +70,9 @@ ZIP_TO_STATE: Dict[str, str] = {
     "075": "NJ", "076": "NJ", "077": "NJ", "078": "NJ", "079": "NJ",
     "080": "NJ", "081": "NJ", "082": "NJ", "083": "NJ", "084": "NJ",
     "085": "NJ", "086": "NJ", "087": "NJ", "088": "NJ", "089": "NJ",
+    # Military (AE, AP, AA)
+    "090": "AE", "091": "AE", "092": "AE", "093": "AE", "094": "AE",
+    "095": "AE", "096": "AE", "097": "AE", "098": "AE", "099": "AE",
     # New York
     "100": "NY", "101": "NY", "102": "NY", "103": "NY", "104": "NY",
     "105": "NY", "106": "NY", "107": "NY", "108": "NY", "109": "NY",
@@ -87,11 +97,13 @@ ZIP_TO_STATE: Dict[str, str] = {
     "195": "PA", "196": "PA",
     # Delaware
     "197": "DE", "198": "DE", "199": "DE",
-    # DC, Maryland, Virginia
+    # DC
     "200": "DC", "201": "DC", "202": "DC", "203": "DC", "204": "DC", "205": "DC",
+    # Maryland (complete)
     "206": "MD", "207": "MD", "208": "MD", "209": "MD",
-    "210": "MD", "211": "MD", "212": "MD", "214": "MD", "215": "MD",
+    "210": "MD", "211": "MD", "212": "MD", "213": "MD", "214": "MD", "215": "MD",
     "216": "MD", "217": "MD", "218": "MD", "219": "MD",
+    # Virginia
     "220": "VA", "221": "VA", "222": "VA", "223": "VA", "224": "VA",
     "225": "VA", "226": "VA", "227": "VA", "228": "VA", "229": "VA",
     "230": "VA", "231": "VA", "232": "VA", "233": "VA", "234": "VA",
@@ -103,7 +115,7 @@ ZIP_TO_STATE: Dict[str, str] = {
     "250": "WV", "251": "WV", "252": "WV", "253": "WV", "254": "WV",
     "255": "WV", "256": "WV", "257": "WV", "258": "WV", "259": "WV",
     "260": "WV", "261": "WV", "262": "WV", "263": "WV", "264": "WV",
-    "265": "WV", "266": "WV", "267": "WV", "268": "WV",
+    "265": "WV", "266": "WV", "267": "WV", "268": "WV", "269": "WV",
     # North Carolina
     "270": "NC", "271": "NC", "272": "NC", "273": "NC", "274": "NC",
     "275": "NC", "276": "NC", "277": "NC", "278": "NC", "279": "NC",
@@ -117,14 +129,15 @@ ZIP_TO_STATE: Dict[str, str] = {
     "305": "GA", "306": "GA", "307": "GA", "308": "GA", "309": "GA",
     "310": "GA", "311": "GA", "312": "GA", "313": "GA", "314": "GA",
     "315": "GA", "316": "GA", "317": "GA", "318": "GA", "319": "GA",
-    # Florida
+    # Florida (complete)
     "320": "FL", "321": "FL", "322": "FL", "323": "FL", "324": "FL",
     "325": "FL", "326": "FL", "327": "FL", "328": "FL", "329": "FL",
     "330": "FL", "331": "FL", "332": "FL", "333": "FL", "334": "FL",
     "335": "FL", "336": "FL", "337": "FL", "338": "FL", "339": "FL",
-    "340": "FL", "341": "FL", "342": "FL", "344": "FL", "346": "FL", "347": "FL",
-    # Alabama
-    "350": "AL", "351": "AL", "352": "AL", "354": "AL", "355": "AL",
+    "340": "FL", "341": "FL", "342": "FL", "343": "FL", "344": "FL",
+    "345": "FL", "346": "FL", "347": "FL", "348": "FL", "349": "FL",
+    # Alabama (complete)
+    "350": "AL", "351": "AL", "352": "AL", "353": "AL", "354": "AL", "355": "AL",
     "356": "AL", "357": "AL", "358": "AL", "359": "AL",
     "360": "AL", "361": "AL", "362": "AL", "363": "AL", "364": "AL",
     "365": "AL", "366": "AL", "367": "AL", "368": "AL", "369": "AL",
@@ -136,12 +149,14 @@ ZIP_TO_STATE: Dict[str, str] = {
     # Mississippi
     "386": "MS", "387": "MS", "388": "MS", "389": "MS",
     "390": "MS", "391": "MS", "392": "MS", "393": "MS", "394": "MS",
-    "395": "MS", "396": "MS", "397": "MS",
-    # Kentucky
+    "395": "MS", "396": "MS", "397": "MS", "398": "MS", "399": "MS",
+    # Kentucky (complete - includes 419-427)
     "400": "KY", "401": "KY", "402": "KY", "403": "KY", "404": "KY",
     "405": "KY", "406": "KY", "407": "KY", "408": "KY", "409": "KY",
     "410": "KY", "411": "KY", "412": "KY", "413": "KY", "414": "KY",
-    "415": "KY", "416": "KY", "417": "KY", "418": "KY",
+    "415": "KY", "416": "KY", "417": "KY", "418": "KY", "419": "KY",
+    "420": "KY", "421": "KY", "422": "KY", "423": "KY", "424": "KY",
+    "425": "KY", "426": "KY", "427": "KY",
     # Ohio
     "430": "OH", "431": "OH", "432": "OH", "433": "OH", "434": "OH",
     "435": "OH", "436": "OH", "437": "OH", "438": "OH", "439": "OH",
@@ -164,19 +179,22 @@ ZIP_TO_STATE: Dict[str, str] = {
     "505": "IA", "506": "IA", "507": "IA", "508": "IA", "509": "IA",
     "510": "IA", "511": "IA", "512": "IA", "513": "IA", "514": "IA",
     "515": "IA", "516": "IA",
-    # Wisconsin/Minnesota
+    # Wisconsin
     "520": "WI", "521": "WI", "522": "WI", "523": "WI", "524": "WI",
     "525": "WI", "526": "WI", "527": "WI", "528": "WI", "529": "WI",
-    "530": "WI", "531": "WI", "532": "WI", "534": "WI", "535": "WI",
-    "537": "WI", "538": "WI", "539": "WI",
+    "530": "WI", "531": "WI", "532": "WI", "533": "WI", "534": "WI",
+    "535": "WI", "536": "WI", "537": "WI", "538": "WI", "539": "WI",
+    # Minnesota
     "540": "MN", "541": "MN", "542": "MN", "543": "MN", "544": "MN",
     "545": "MN", "546": "MN", "547": "MN", "548": "MN", "549": "MN",
-    "550": "MN", "551": "MN", "553": "MN", "554": "MN", "555": "MN",
-    "556": "MN", "557": "MN", "558": "MN", "559": "MN",
+    "550": "MN", "551": "MN", "552": "MN", "553": "MN", "554": "MN",
+    "555": "MN", "556": "MN", "557": "MN", "558": "MN", "559": "MN",
+    # South Dakota
     "560": "SD", "561": "SD", "562": "SD", "563": "SD", "564": "SD",
     "565": "SD", "566": "SD", "567": "SD",
     "570": "SD", "571": "SD", "572": "SD", "573": "SD", "574": "SD",
     "575": "SD", "576": "SD", "577": "SD",
+    # North Dakota
     "580": "ND", "581": "ND", "582": "ND", "583": "ND", "584": "ND",
     "585": "ND", "586": "ND", "587": "ND", "588": "ND",
     # Montana
@@ -187,37 +205,37 @@ ZIP_TO_STATE: Dict[str, str] = {
     "605": "IL", "606": "IL", "607": "IL", "608": "IL", "609": "IL",
     "610": "IL", "611": "IL", "612": "IL", "613": "IL", "614": "IL",
     "615": "IL", "616": "IL", "617": "IL", "618": "IL", "619": "IL",
-    "620": "IL", "622": "IL", "623": "IL", "624": "IL", "625": "IL",
-    "626": "IL", "627": "IL", "628": "IL", "629": "IL",
+    "620": "IL", "621": "IL", "622": "IL", "623": "IL", "624": "IL",
+    "625": "IL", "626": "IL", "627": "IL", "628": "IL", "629": "IL",
     # Missouri
-    "630": "MO", "631": "MO", "633": "MO", "634": "MO", "635": "MO",
-    "636": "MO", "637": "MO", "638": "MO", "639": "MO",
-    "640": "MO", "641": "MO", "644": "MO", "645": "MO", "646": "MO",
-    "647": "MO", "648": "MO", "649": "MO",
+    "630": "MO", "631": "MO", "632": "MO", "633": "MO", "634": "MO",
+    "635": "MO", "636": "MO", "637": "MO", "638": "MO", "639": "MO",
+    "640": "MO", "641": "MO", "642": "MO", "643": "MO", "644": "MO",
+    "645": "MO", "646": "MO", "647": "MO", "648": "MO", "649": "MO",
     "650": "MO", "651": "MO", "652": "MO", "653": "MO", "654": "MO",
     "655": "MO", "656": "MO", "657": "MO", "658": "MO",
     # Kansas
-    "660": "KS", "661": "KS", "662": "KS", "664": "KS", "665": "KS",
-    "666": "KS", "667": "KS", "668": "KS", "669": "KS",
+    "660": "KS", "661": "KS", "662": "KS", "663": "KS", "664": "KS",
+    "665": "KS", "666": "KS", "667": "KS", "668": "KS", "669": "KS",
     "670": "KS", "671": "KS", "672": "KS", "673": "KS", "674": "KS",
     "675": "KS", "676": "KS", "677": "KS", "678": "KS", "679": "KS",
     # Nebraska
-    "680": "NE", "681": "NE", "683": "NE", "684": "NE", "685": "NE",
-    "686": "NE", "687": "NE", "688": "NE", "689": "NE",
+    "680": "NE", "681": "NE", "682": "NE", "683": "NE", "684": "NE",
+    "685": "NE", "686": "NE", "687": "NE", "688": "NE", "689": "NE",
     "690": "NE", "691": "NE", "692": "NE", "693": "NE",
     # Louisiana
-    "700": "LA", "701": "LA", "703": "LA", "704": "LA", "705": "LA",
-    "706": "LA", "707": "LA", "708": "LA",
+    "700": "LA", "701": "LA", "702": "LA", "703": "LA", "704": "LA",
+    "705": "LA", "706": "LA", "707": "LA", "708": "LA",
     "710": "LA", "711": "LA", "712": "LA", "713": "LA", "714": "LA",
     # Arkansas
     "716": "AR", "717": "AR", "718": "AR", "719": "AR",
     "720": "AR", "721": "AR", "722": "AR", "723": "AR", "724": "AR",
     "725": "AR", "726": "AR", "727": "AR", "728": "AR", "729": "AR",
     # Oklahoma
-    "730": "OK", "731": "OK", "733": "OK", "734": "OK", "735": "OK",
-    "736": "OK", "737": "OK", "738": "OK", "739": "OK",
-    "740": "OK", "741": "OK", "743": "OK", "744": "OK", "745": "OK",
-    "746": "OK", "747": "OK", "748": "OK", "749": "OK",
+    "730": "OK", "731": "OK", "732": "OK", "733": "OK", "734": "OK",
+    "735": "OK", "736": "OK", "737": "OK", "738": "OK", "739": "OK",
+    "740": "OK", "741": "OK", "742": "OK", "743": "OK", "744": "OK",
+    "745": "OK", "746": "OK", "747": "OK", "748": "OK", "749": "OK",
     # Texas
     "750": "TX", "751": "TX", "752": "TX", "753": "TX", "754": "TX",
     "755": "TX", "756": "TX", "757": "TX", "758": "TX", "759": "TX",
@@ -243,10 +261,10 @@ ZIP_TO_STATE: Dict[str, str] = {
     # Utah
     "840": "UT", "841": "UT", "842": "UT", "843": "UT", "844": "UT",
     "845": "UT", "846": "UT", "847": "UT",
-    # Arizona
-    "850": "AZ", "851": "AZ", "852": "AZ", "853": "AZ", "855": "AZ",
-    "856": "AZ", "857": "AZ", "859": "AZ",
-    "860": "AZ", "863": "AZ", "864": "AZ", "865": "AZ",
+    # Arizona (complete)
+    "850": "AZ", "851": "AZ", "852": "AZ", "853": "AZ", "854": "AZ", "855": "AZ",
+    "856": "AZ", "857": "AZ", "858": "AZ", "859": "AZ",
+    "860": "AZ", "861": "AZ", "862": "AZ", "863": "AZ", "864": "AZ", "865": "AZ",
     # New Mexico
     "870": "NM", "871": "NM", "872": "NM", "873": "NM", "874": "NM",
     "875": "NM", "877": "NM", "878": "NM", "879": "NM",
@@ -283,10 +301,27 @@ ZIP_TO_STATE: Dict[str, str] = {
 
 
 def get_state_from_zip(zip_code: str) -> Optional[str]:
-    """Get state abbreviation from ZIP code."""
-    if not zip_code or len(zip_code) < 3:
+    """Get state abbreviation from ZIP code.
+
+    Args:
+        zip_code: A valid US ZIP code (5 digits or 5+4 format like "12345-6789")
+
+    Returns:
+        Two-letter state abbreviation or None if invalid/not found
+    """
+    if not zip_code:
         return None
-    prefix = zip_code[:3]
+
+    # Strip whitespace and handle 5+4 format
+    cleaned = zip_code.strip()
+    if "-" in cleaned:
+        cleaned = cleaned.split("-")[0]
+
+    # Validate: must be exactly 5 digits
+    if len(cleaned) != 5 or not cleaned.isdigit():
+        return None
+
+    prefix = cleaned[:3]
     return ZIP_TO_STATE.get(prefix)
 
 
@@ -773,20 +808,18 @@ def build_local_feeds(location_name: str, zip_code: Optional[str] = None) -> Lis
     if not queries:
         return []
     base = "https://news.google.com/rss/search"
+    location_str = " ".join(queries)
     feed_queries = [
-        " ".join(queries + ["police"]),
-        " ".join(queries + ["sheriff"]),
-        " ".join(queries + ["fire department"]),
-        " ".join(queries + ["emergency management"]),
-        " ".join(queries + ["weather alert"]),
-        " ".join(queries + ["road closure"]),
+        f"{location_str} police",
+        f"{location_str} sheriff",
+        f"{location_str} fire department",
+        f"{location_str} emergency management",
+        f"{location_str} weather alert",
+        f"{location_str} road closure",
     ]
     feeds = []
     for q in feed_queries:
-        query = "+".join(
-            part.strip().replace(" ", "+") for part in q.split() if part.strip()
-        )
-        feeds.append(f"{base}?q={query}&hl=en-US&gl=US&ceid=US:en")
+        feeds.append(f"{base}?q={quote_plus(q)}&hl=en-US&gl=US&ceid=US:en")
     return feeds
 
 
@@ -1075,15 +1108,11 @@ def build_comprehensive_local_feeds(
 
     # 3. Subject + location Google News feed
     if subject and location_name:
-        query_parts = [subject]
-        if location_name:
-            query_parts.append(location_name)
+        query_parts = [subject, location_name]
         if zip_code:
             query_parts.append(zip_code)
-        query = "+".join(
-            part.strip().replace(" ", "+") for part in query_parts if part.strip()
-        )
-        add_feed(f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en")
+        query = " ".join(part.strip() for part in query_parts if part.strip())
+        add_feed(f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en")
 
     # 4. Emergency services and utility feeds (discovered)
     try:
