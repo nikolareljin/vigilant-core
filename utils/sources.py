@@ -44,7 +44,7 @@ US_STATES: Dict[str, str] = {
 # ZIP code prefix to state mapping (first 3 digits) - Complete mapping
 ZIP_TO_STATE: Dict[str, str] = {
     # Puerto Rico / Virgin Islands
-    "006": "PR", "007": "PR", "008": "PR", "009": "PR",
+    "006": "PR", "007": "PR", "009": "PR",
     "008": "VI",  # Virgin Islands uses 008xx
     # Massachusetts
     "010": "MA", "011": "MA", "012": "MA", "013": "MA", "014": "MA",
