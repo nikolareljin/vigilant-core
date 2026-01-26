@@ -1130,7 +1130,7 @@ def build_comprehensive_local_feeds(
         for feed in local_feeds:
             add_feed(feed)
     except Exception:
-        pass
+        pass  # Don't fail if local source discovery fails
 
     return feeds
 
