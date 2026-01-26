@@ -95,10 +95,6 @@ Open your browser to: **http://127.0.0.1:8765**
 
 Initial results of the search.
 
-Results with the AI generated results to the prompt question. All the data is in the local (no external services used to generate the content).
-
-<img width="1920" height="934" alt="image" src="https://github.com/user-attachments/assets/a16a124a-1e98-4414-9bbb-131f15f3d138" />
-
 
 ### Qt Desktop App
 
