@@ -67,20 +67,32 @@ The launcher will automatically create a virtual environment and install depende
 
 ### Web Dashboard
 
+Configure the dashboard:
+
+<img width="1920" height="3375" alt="image" src="https://github.com/user-attachments/assets/807bd2fc-3312-4066-aef6-e3114c4cac1c" />
+
+In the examples above, Princeton Palmer Square was used as the location. You can use your own location, ZIP code, address and longitude/latitude.
+
 Open your browser to: **http://127.0.0.1:8765**
 
-<img width="1920" height="1335" alt="image" src="https://github.com/user-attachments/assets/b3f150f1-4bee-467c-84b1-ce6888906fdb" />
+<img width="1920" height="1368" alt="image" src="https://github.com/user-attachments/assets/a2a34e87-6ce6-489b-a4d5-246500ab8243" />
+
+Initial results of the search.
+
+Results with the AI generated results to the prompt question. All the data is in the local (no external services used to generate the content).
+
+<img width="1920" height="934" alt="image" src="https://github.com/user-attachments/assets/a16a124a-1e98-4414-9bbb-131f15f3d138" />
 
 
 ### Qt Desktop App
 
 Launch with `./run.sh qt` (or `run.bat qt` on Windows).
 
-<img width="599" height="766" alt="image" src="https://github.com/user-attachments/assets/e482914c-03ba-444a-ab55-fd5e84a78dec" />
+<img width="616" height="742" alt="image" src="https://github.com/user-attachments/assets/ec3a8c6d-5c9b-409c-a63c-978680944faf" />
 
-Results view:
+Results view with the AI generated content:
 
-<img width="1100" height="740" alt="image" src="https://github.com/user-attachments/assets/acf84f66-1408-4278-9785-1bbee3b0d63c" />
+<img width="1100" height="735" alt="image" src="https://github.com/user-attachments/assets/83bbedc3-ecfa-4c91-b94b-26b8ccacb522" />
 
 
 ## One-Command Bootstrap (curl/wget)
