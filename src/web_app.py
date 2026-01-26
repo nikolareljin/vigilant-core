@@ -495,7 +495,7 @@ SETUP_TEMPLATE = """
       <input name="google_cse_api_key" type="password" value="{{ config.google_cse_api_key or '' }}" placeholder="Your Google API key (optional)" />
 
       <label>Google CSE CX (Search Engine ID)</label>
-      <input name="google_cse_cx" value="{{ config.google_cse_cx or '' }}" placeholder="e.g., 0123456789:abcde" />
+      <input name="google_cse_cx" type="password" value="{{ config.google_cse_cx or '' }}" placeholder="e.g., 0123456789:abcde" />
     </div>
 
     <button type="submit">Save & Start Monitoring</button>

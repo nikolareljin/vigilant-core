@@ -258,6 +258,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.google_cse_key_input = QtWidgets.QLineEdit()
         self.google_cse_key_input.setEchoMode(QtWidgets.QLineEdit.Password)
         self.google_cse_cx_input = QtWidgets.QLineEdit()
+        self.google_cse_cx_input.setEchoMode(QtWidgets.QLineEdit.Password)
         self.news_window_combo = QtWidgets.QComboBox()
         self.news_window_combo.addItems(["6", "24", "72", "168"])
         self.news_sort_combo = QtWidgets.QComboBox()
