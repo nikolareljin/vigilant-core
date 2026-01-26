@@ -2,7 +2,7 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
-## [1.0.0] - 2026-01-25
+## [0.1.0] - 2026-01-25
 
 ### Added
 
@@ -57,7 +57,7 @@ All notable changes to VigilantCore will be documented in this file.
 - Improved settings form layout with grouped sections
 - Enhanced insight display with purple gradient styling
 
-## [0.9.0] - Previous Release
+## [0.1.0-rc] - Initial Release Candidate
 
 ### Features
 
