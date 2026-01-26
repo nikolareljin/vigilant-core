@@ -4,11 +4,22 @@
 
 VigilantCore is a local, cross-platform monitoring app that tracks **Impactful Events** for a specific subject, using a local LLM (Ollama) to score impact and generate predictive outcomes. It is designed to be simple for non-technical users while still offering an AI-driven, location-aware signal.
 
-## User Journey (Spec-Driven)
+**All AI processing happens locally on your computer - no data is sent to external servers.**
+
+## Key Features
+
+- **AI-Powered Insights**: Ask specific monitoring questions and get AI-generated answers
+- **Impact Scoring**: Every alert scored 1-10 for relevance and urgency
+- **Location-Aware**: Filter alerts by ZIP code, coordinates, or radius
+- **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, and 30+ curated sources
+- **Cross-Platform**: Web dashboard and Qt desktop app
+- **Privacy-First**: All processing done locally via Ollama
+
+## User Journey
 1. **First Run**: Open the app, enter your subject, location, and optional RSS feeds/API key.
-2. **Live Impact Feed**: The dashboard starts monitoring automatically and shows scored alerts.
-3. **Impact Scoring**: Each alert is ranked from 1–10 based on relevance and urgency.
-4. **Predictive Outcome**: For Watches/Warnings, the app predicts what happens next.
+2. **Set Monitoring Question**: Ask a specific question like "When is the peak risk of power outage?"
+3. **Live Impact Feed**: The dashboard shows scored alerts with AI-generated insights.
+4. **Impact Scoring**: Each alert is ranked from 1–10 based on relevance and urgency.
 5. **Stay Informed**: New alerts appear in near real-time and are stored locally.
 
 ## Impact Score Logic (Overview)
@@ -26,24 +37,48 @@ VigilantCore prefers local signals by combining:
 - Python 3.10+
 - Ollama installed and running locally
 
-## Quick Start (Non-Technical)
-1. Install Python.
-2. Double-click `run.sh` (macOS/Linux) or `run.bat` (Windows).
-3. Fill out the setup wizard and click **Save**.
+## Quick Start
 
-Web interface results:
+### Requirements
+- Python 3.10+
+- Ollama installed and running locally
+
+### Installation
+1. Clone the repository
+2. Run the launcher script:
+
+**Linux/macOS:**
+```bash
+./run.sh          # Start web dashboard (default)
+./run.sh qt       # Start Qt desktop app
+./run.sh both     # Start both (web in background)
+./run.sh stop     # Stop all instances
+./run.sh status   # Check what's running
+```
+
+**Windows:**
+```cmd
+run.bat           # Start web dashboard
+run.bat qt        # Start Qt desktop app
+run.bat stop      # Stop all instances
+```
+
+The launcher will automatically create a virtual environment and install dependencies.
+
+### Web Dashboard
+
+Open your browser to: **http://127.0.0.1:8765**
 
 <img width="1920" height="1335" alt="image" src="https://github.com/user-attachments/assets/b3f150f1-4bee-467c-84b1-ce6888906fdb" />
 
 
-## Qt UI (Desktop)
-Launch the desktop UI directly:
-- macOS/Linux: `./run-qt.sh`
-- Windows: `run-qt.bat`
+### Qt Desktop App
+
+Launch with `./run.sh qt` (or `run.bat qt` on Windows).
 
 <img width="599" height="766" alt="image" src="https://github.com/user-attachments/assets/e482914c-03ba-444a-ab55-fd5e84a78dec" />
 
-Results are displayed on the next view:
+Results view:
 
 <img width="1100" height="740" alt="image" src="https://github.com/user-attachments/assets/acf84f66-1408-4278-9785-1bbee3b0d63c" />
 
@@ -68,19 +103,34 @@ This will:
 - install dependencies,
 - start the web dashboard at `http://127.0.0.1:8765`.
 
-## Web Dashboard (Browser)
-The local browser page prompts for:
-- **Event/Subject**
-- **Monitoring Question (optional)**
-- **Prefer lighter model on 8GB or less**
-- **Location / ZIP / GPS**
-- **Radius (km)**
+## Monitoring Question & AI Insights
 
-You can reopen the same page any time by visiting:
-`http://127.0.0.1:8765`
+The **Monitoring Question** feature lets you ask specific questions about your monitored subject. The AI analyzes recent alerts and generates focused insights.
 
-Additional data view:
-`http://127.0.0.1:8765/data`
+**Example questions:**
+- "What is the expected time of highest risk of power outage in my area?"
+- "Should I clear my driveway now, or wait until the snow stops?"
+- "Are there any travel advisories affecting I-95?"
+
+The insight appears as an expandable card above the alerts list, showing:
+- **Summary**: Brief answer to your question
+- **Explanation**: Detailed analysis with supporting evidence
+
+Configure refresh interval in Settings under "AI Settings".
+
+## Web Dashboard
+
+The web interface is available at: **http://127.0.0.1:8765**
+
+Settings page prompts for:
+- **Event/Subject** - What to monitor
+- **Monitoring Question** - Specific question for AI insights
+- **Location / ZIP / GPS** - Geographic filtering
+- **Radius (km)** - Search area
+- **AI Settings** - Model preferences, insight refresh rate
+- **Data Sources** - RSS feeds, API keys
+
+Additional data view: `http://127.0.0.1:8765/data`
 
 ## Zero-Input Discovery
 If you provide no RSS feeds or API keys, VigilantCore will still:
@@ -221,3 +271,16 @@ You can control how recent NewsAPI results should be. Default is **6 hours**.
 
 ### NewsAPI Sort Order
 Default is **popularity**. You can also choose **publishedAt** or **relevancy** from the Settings UI.
+
+## Documentation
+
+Full documentation is available in the `docs/` folder:
+
+- [Installation Guide](docs/installation.md) - Detailed setup instructions
+- [Configuration Guide](docs/configuration.md) - All configuration options
+- [Features](docs/features.md) - Complete feature documentation
+- [Examples](docs/examples.md) - Real-world usage examples (winter storms, power outages, etc.)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history and changes.

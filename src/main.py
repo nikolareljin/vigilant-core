@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -15,6 +16,223 @@ if str(ROOT_DIR) not in sys.path:
 from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
+
+
+def generate_insight(config: AppConfig) -> Optional[Dict]:
+    """Generate AI insight based on monitoring question and recent alerts."""
+    if not config.question or not config.question.strip():
+        return None
+
+    alerts = database.fetch_recent(50)
+    if not alerts:
+        return {
+            "question": config.question,
+            "summary": "No relevant data available.",
+            "explanation": "No alerts have been collected yet.",
+            "sources_used": [],
+        }
+
+    # Build context from alerts
+    alert_summaries = []
+    sources_used = set()
+    for alert in alerts[:30]:
+        title = alert["title"] or ""
+        snippet = alert["snippet"] or ""
+        source = alert["source"] or "Unknown"
+        score = alert["impact_score"] or 0
+        prediction = alert["predictive_outcome"] or ""
+        sources_used.add(source)
+        alert_summaries.append(
+            f"- [{source}] (impact: {score}/10) {title}. {snippet[:200]}"
+            + (f" Prediction: {prediction}" if prediction else "")
+        )
+
+    context = "\n".join(alert_summaries)
+
+    try:
+        from ollama import Client as OllamaClient
+    except ImportError:
+        return {"question": config.question, "error": "Ollama not available"}
+
+    try:
+        client = OllamaClient()
+        model = "qwen2.5:7b"
+
+        resp = client.list()
+        models = resp.models if hasattr(resp, "models") else resp.get("models", [])
+        available = set()
+        for m in models:
+            if hasattr(m, "model"):
+                available.add(m.model)
+            elif isinstance(m, dict) and m.get("name"):
+                available.add(m.get("name"))
+
+        if model not in available and available:
+            model = next(iter(available))
+
+        system_prompt = (
+            f"You are an intelligence analyst. Based on the collected news and alerts about "
+            f"'{config.subject}' in '{config.location_name}', answer the user's monitoring question. "
+            f"Be concise, factual, and cite specific alerts when relevant. "
+            f"If asked about probability or likelihood, provide a percentage estimate with brief reasoning."
+        )
+
+        user_prompt = (
+            f"MONITORING QUESTION: {config.question}\n\n"
+            f"RECENT ALERTS AND NEWS:\n{context}\n\n"
+            f"Provide your response as JSON with these keys:\n"
+            f'- "summary": A 1-2 sentence direct answer (include probability % if asked about likelihood)\n'
+            f'- "explanation": A 2-4 sentence detailed explanation of how you reached this conclusion\n'
+            f"Respond with ONLY valid JSON, no other text."
+        )
+
+        response = client.chat(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        content = response.get("message", {}).get("content", "{}").strip()
+
+        try:
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = {"summary": content[:300], "explanation": content}
+
+        return {
+            "question": config.question,
+            "summary": payload.get("summary", "Unable to generate summary."),
+            "explanation": payload.get("explanation", ""),
+            "sources_used": list(sources_used)[:10],
+        }
+
+    except Exception as e:
+        return {"question": config.question, "error": str(e)}
+
+
+class InsightThread(QtCore.QThread):
+    """Background thread to generate AI insights."""
+    insight_ready = QtCore.Signal(dict)
+
+    def __init__(self, config: AppConfig, parent: QtCore.QObject | None = None) -> None:
+        super().__init__(parent)
+        self.config = config
+        self._running = True
+
+    def run(self) -> None:
+        import time
+        interval_seconds = max(60, (self.config.insight_refresh_minutes or 5) * 60)
+
+        while self._running:
+            result = generate_insight(self.config)
+            if result:
+                self.insight_ready.emit(result)
+
+            # Sleep in small increments to allow stopping
+            for _ in range(int(interval_seconds)):
+                if not self._running:
+                    break
+                time.sleep(1)
+
+    def stop(self) -> None:
+        self._running = False
+
+
+class InsightWidget(QtWidgets.QFrame):
+    """Expandable widget to display AI-generated insight."""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFrameStyle(QtWidgets.QFrame.StyledPanel)
+        self.setStyleSheet("""
+            InsightWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #667eea, stop:1 #764ba2);
+                border-radius: 10px;
+                padding: 8px;
+            }
+            QLabel { color: white; }
+        """)
+        self.setVisible(False)
+        self._expanded = False
+
+        # Question label
+        self.question_label = QtWidgets.QLabel()
+        self.question_label.setStyleSheet("font-size: 11px; opacity: 0.9;")
+        self.question_label.setWordWrap(True)
+
+        # Summary label (clickable)
+        self.summary_label = QtWidgets.QLabel()
+        self.summary_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.summary_label.mousePressEvent = self._toggle_expanded
+
+        # Expand indicator
+        self.expand_indicator = QtWidgets.QLabel("▼ Click to expand")
+        self.expand_indicator.setStyleSheet("font-size: 10px; opacity: 0.7;")
+
+        # Explanation (hidden by default)
+        self.explanation_label = QtWidgets.QLabel()
+        self.explanation_label.setStyleSheet("font-size: 13px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);")
+        self.explanation_label.setWordWrap(True)
+        self.explanation_label.setVisible(False)
+
+        # Sources
+        self.sources_label = QtWidgets.QLabel()
+        self.sources_label.setStyleSheet("font-size: 10px; opacity: 0.8; margin-top: 8px;")
+        self.sources_label.setWordWrap(True)
+        self.sources_label.setVisible(False)
+
+        # Timestamp
+        self.timestamp_label = QtWidgets.QLabel()
+        self.timestamp_label.setStyleSheet("font-size: 9px; opacity: 0.6; margin-top: 4px;")
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.addWidget(self.question_label)
+        layout.addWidget(self.summary_label)
+        layout.addWidget(self.expand_indicator)
+        layout.addWidget(self.explanation_label)
+        layout.addWidget(self.sources_label)
+        layout.addWidget(self.timestamp_label)
+
+    def _toggle_expanded(self, event) -> None:
+        self._expanded = not self._expanded
+        self.explanation_label.setVisible(self._expanded)
+        self.sources_label.setVisible(self._expanded)
+        self.expand_indicator.setText("▲ Click to collapse" if self._expanded else "▼ Click to expand")
+
+    def update_insight(self, data: Dict) -> None:
+        if data.get("error"):
+            self.setVisible(False)
+            return
+
+        summary = data.get("summary", "")
+        if not summary or summary == "No relevant data available.":
+            self.setVisible(False)
+            return
+
+        self.question_label.setText(f"📋 {data.get('question', '')}")
+        self.summary_label.setText(summary)
+        self.explanation_label.setText(data.get("explanation", ""))
+
+        sources = data.get("sources_used", [])
+        if sources:
+            self.sources_label.setText("Based on: " + ", ".join(sources[:5]))
+        else:
+            self.sources_label.setText("")
+
+        from datetime import datetime
+        self.timestamp_label.setText(f"Updated: {datetime.now().strftime('%H:%M:%S')}")
+
+        self.setVisible(True)
 
 
 class FirstRunDialog(QtWidgets.QDialog):
@@ -46,6 +264,9 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.news_sort_combo.addItems(["popularity", "publishedAt", "relevancy"])
         self.duckduckgo_checkbox = QtWidgets.QCheckBox("Enable DuckDuckGo web search")
         self.polling_input = QtWidgets.QLineEdit()
+        self.insight_refresh_combo = QtWidgets.QComboBox()
+        self.insight_refresh_combo.addItems(["1", "5", "10", "15", "30"])
+        self.insight_refresh_combo.setCurrentText("5")
         self.subject_input.setToolTip("What you want to monitor (e.g., weather alerts).")
         self.question_input.setToolTip("Optional question to guide the AI focus.")
         self.light_model_checkbox.setToolTip("Use a smaller model on low-RAM systems.")
@@ -65,6 +286,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.news_sort_combo.setToolTip("NewsAPI sort order.")
         self.duckduckgo_checkbox.setToolTip("Use DuckDuckGo HTML search for additional results.")
         self.polling_input.setToolTip("Polling interval in minutes (default 5).")
+        self.insight_refresh_combo.setToolTip("How often to regenerate the AI insight (in minutes).")
 
         form = QtWidgets.QFormLayout()
         form.addRow("Subject", self.subject_input)
@@ -86,6 +308,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         form.addRow("NewsAPI sort order", self.news_sort_combo)
         form.addRow("", self.duckduckgo_checkbox)
         form.addRow("Polling interval (minutes)", self.polling_input)
+        form.addRow("Insight refresh (minutes)", self.insight_refresh_combo)
         api_links = QtWidgets.QLabel(
             "<a href='https://programmablesearchengine.google.com/'>Google CSE</a> | "
             "<a href='https://developers.google.com/custom-search/v1/overview'>Google JSON API</a> | "
@@ -135,6 +358,7 @@ class FirstRunDialog(QtWidgets.QDialog):
             google_cse_cx=self.google_cse_cx_input.text().strip() or None,
             enable_duckduckgo_search=self.duckduckgo_checkbox.isChecked(),
             polling_minutes=int(self.polling_input.text().strip() or "5"),
+            insight_refresh_minutes=int(self.insight_refresh_combo.currentText() or "5"),
         )
 
 
@@ -171,7 +395,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("VigilantCore")
         self.resize(1100, 700)
         self.config = config
+
+        # Set window icon
+        icon_path = ROOT_DIR / "assets" / "app_icon.png"
+        if icon_path.exists():
+            self.setWindowIcon(QtGui.QIcon(str(icon_path)))
         self.monitor_thread: MonitorThread | None = None
+        self.insight_thread: InsightThread | None = None
+
+        # Insight widget (above the table)
+        self.insight_widget = InsightWidget()
 
         self.table = QtWidgets.QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
@@ -200,9 +433,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.start_button.clicked.connect(self.start_monitoring)
         self.stop_button.clicked.connect(self.stop_monitoring)
 
+        # Privacy note
+        self.privacy_label = QtWidgets.QLabel("🔒 Local AI - data never shared externally")
+        self.privacy_label.setStyleSheet("color: #16a34a; font-size: 11px;")
+        self.privacy_label.setToolTip("All processing is done locally on this computer using Ollama. No data is sent to external servers.")
+
         controls = QtWidgets.QHBoxLayout()
         controls.addWidget(self.start_button)
         controls.addWidget(self.stop_button)
+        controls.addWidget(self.privacy_label)
         controls.addStretch(1)
         controls.addWidget(self.status_label)
         controls.addWidget(self.model_label)
@@ -210,6 +449,7 @@ class MainWindow(QtWidgets.QMainWindow):
         central = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(central)
         layout.addLayout(controls)
+        layout.addWidget(self.insight_widget)
         layout.addWidget(self.table)
         self.setCentralWidget(central)
 
@@ -265,6 +505,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.monitor_thread.status.connect(self.on_status)
         self.monitor_thread.model.connect(self.on_model)
         self.monitor_thread.start()
+
+        # Start insight thread if there's a monitoring question
+        if self.config.question and self.config.question.strip():
+            self.insight_thread = InsightThread(self.config)
+            self.insight_thread.insight_ready.connect(self.insight_widget.update_insight)
+            self.insight_thread.start()
+
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
 
@@ -272,6 +519,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.monitor_thread:
             self.monitor_thread.stop()
             self.monitor_thread.wait(2000)
+        if self.insight_thread:
+            self.insight_thread.stop()
+            self.insight_thread.wait(2000)
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.status_label.setText("Stopped")
@@ -312,6 +562,7 @@ class MainWindow(QtWidgets.QMainWindow):
             dialog.google_cse_cx_input.setText(self.config.google_cse_cx)
         dialog.duckduckgo_checkbox.setChecked(self.config.enable_duckduckgo_search)
         dialog.polling_input.setText(str(self.config.polling_minutes))
+        dialog.insight_refresh_combo.setCurrentText(str(self.config.insight_refresh_minutes or 5))
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             self.config = dialog.to_config()
             save_config(self.config)
@@ -334,6 +585,12 @@ def ensure_config() -> AppConfig:
 def main() -> None:
     database.init_db()
     app = QtWidgets.QApplication(sys.argv)
+
+    # Set application icon
+    icon_path = ROOT_DIR / "assets" / "app_icon.png"
+    if icon_path.exists():
+        app.setWindowIcon(QtGui.QIcon(str(icon_path)))
+
     config = ensure_config()
     window = MainWindow(config)
     window.show()

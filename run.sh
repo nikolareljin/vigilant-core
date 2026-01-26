@@ -1,20 +1,36 @@
 #!/usr/bin/env bash
+#
+# VigilantCore Launcher (Linux/macOS)
+#
+# Usage:
+#   ./run.sh          # Start web dashboard (default)
+#   ./run.sh web      # Start web dashboard
+#   ./run.sh qt       # Start Qt desktop app
+#   ./run.sh both     # Start both (web in background)
+#   ./run.sh stop     # Stop all instances
+#   ./run.sh status   # Check status
+#
+
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-# Ensure Ollama is installed (model pull handled programmatically in app)
-if ! command -v ollama >/dev/null 2>&1; then
-  echo "Warning: ollama CLI not found. Install Ollama to enable LLM parsing." >&2
-fi
-
+# Create venv if needed
 if [ ! -d "venv" ]; then
-  python3 -m venv venv
+    echo "Creating virtual environment..."
+    python3 -m venv venv
 fi
 
-# shellcheck disable=SC1091
+# Activate and run
 source venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m src.web_app
+python -m pip install -q --upgrade pip 2>/dev/null || true
+
+# Check if dependencies are installed
+if ! python -c "import flask, PySide6, ollama" 2>/dev/null; then
+    echo "Installing dependencies..."
+    python -m pip install -q -r requirements.txt
+fi
+
+# Run the launcher
+exec python vigilant.py "${1:-web}"

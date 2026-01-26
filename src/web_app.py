@@ -9,7 +9,7 @@ import webbrowser
 from pathlib import Path
 from typing import Optional
 
-from flask import Flask, jsonify, redirect, render_template_string, request, url_for
+from flask import Flask, jsonify, redirect, render_template_string, request, send_from_directory, url_for
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -29,11 +29,20 @@ DASHBOARD_TEMPLATE = """
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VigilantCore Live Impact Feed</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <style>
     body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 24px; background: #f7f7fb; }
     header { display: flex; justify-content: space-between; align-items: center; }
     h1 { margin: 0 0 8px 0; }
     .meta { color: #666; }
+    .privacy-note {
+      font-size: 0.75em;
+      color: #16a34a;
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; background: white; }
     th, td { padding: 10px 12px; border-bottom: 1px solid #eee; text-align: left; }
     th { background: #f0f2f8; }
@@ -117,6 +126,7 @@ DASHBOARD_TEMPLATE = """
     <div>
       <h1>Live Impact Feed</h1>
       <div class="meta">Subject: {{ subject }} | Location: {{ location }} | Model: {{ model }}</div>
+      <div class="privacy-note">🔒 All data processed locally by AI on this computer. Nothing is shared externally.</div>
     </div>
     <div class="toolbar">
       <a class="button secondary" href="{{ url_for('setup') }}">Edit Settings</a>
@@ -270,6 +280,7 @@ DATA_TEMPLATE = """
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VigilantCore Data</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <style>
     body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 24px; background: #f7f7fb; }
     pre { background: #111827; color: #f9fafb; padding: 16px; border-radius: 8px; overflow: auto; }
@@ -305,6 +316,7 @@ SETUP_TEMPLATE = """
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VigilantCore Setup</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <style>
     body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 24px; background: #f7f7fb; }
     form { max-width: 700px; background: white; padding: 18px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
@@ -533,6 +545,15 @@ def get_config() -> AppConfig:
         config.latitude = geo.latitude
         config.longitude = geo.longitude
     return config
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(
+        ROOT_DIR / "assets",
+        "favicon.ico",
+        mimetype="image/vnd.microsoft.icon"
+    )
 
 
 @app.route("/")
