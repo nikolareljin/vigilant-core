@@ -37,11 +37,27 @@ VigilantCore prefers local signals by combining:
 - Python 3.10+
 - Ollama installed and running locally
 
-## Quick Start
+## One-Command Bootstrap (curl/wget)
+You can install and launch the web dashboard in a single command:
 
-### Requirements
-- Python 3.10+
-- Ollama installed and running locally
+```bash
+curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
+```
+
+or with wget:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
+```
+
+This will:
+- clone the repo (if missing),
+- update submodules,
+- create a venv,
+- install dependencies,
+- start the web dashboard at `http://127.0.0.1:8765`.
+
+## Clone and Install
 
 ### Installation
 1. Clone the repository
@@ -93,27 +109,6 @@ Launch with `./run.sh qt` (or `run.bat qt` on Windows).
 Results view with the AI generated content:
 
 <img width="1100" height="735" alt="image" src="https://github.com/user-attachments/assets/83bbedc3-ecfa-4c91-b94b-26b8ccacb522" />
-
-
-## One-Command Bootstrap (curl/wget)
-You can install and launch the web dashboard in a single command:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
-```
-
-or with wget:
-
-```bash
-wget -qO- https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
-```
-
-This will:
-- clone the repo (if missing),
-- update submodules,
-- create a venv,
-- install dependencies,
-- start the web dashboard at `http://127.0.0.1:8765`.
 
 ## Monitoring Question & AI Insights
 
