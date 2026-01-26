@@ -95,6 +95,10 @@ Open your browser to: **http://127.0.0.1:8765**
 
 Initial results of the search.
 
+Results view with the AI generated content:
+
+<img width="1920" height="934" alt="image" src="https://github.com/user-attachments/assets/a8520d98-1787-447a-8c7a-020f829aa2b3" />
+
 
 ### Qt Desktop App
 
