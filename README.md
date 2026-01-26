@@ -6,6 +6,30 @@ VigilantCore is a local, cross-platform monitoring app that tracks **Impactful E
 
 **All AI processing happens locally on your computer - no data is sent to external servers.**
 
+---
+
+## 🚀 Quick Start
+
+**Get started in one command:**
+
+- **Linux/macOS:** 
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
+```
+
+- **Windows:** 
+  
+```powershell
+git clone https://github.com/nikolareljin/vigilant-core.git
+cd vigilant-core
+.\scripts\quickstart.ps1
+```
+
+[**→ Jump to detailed installation instructions**](#quickstart-one-command-setup)
+
+---
+
 ## Key Features
 
 - **AI-Powered Insights**: Ask specific monitoring questions and get AI-generated answers
@@ -35,31 +59,109 @@ VigilantCore prefers local signals by combining:
 
 ## Requirements
 - Python 3.10+
-- Ollama installed and running locally
+- Git (for cloning/updating)
+- Ollama (automatically installed by quickstart scripts)
 
-## One-Command Bootstrap (curl/wget)
-You can install and launch the web dashboard in a single command:
+## Quickstart (One-Command Setup)
 
+Choose the command for your operating system:
+
+| Platform | Command |
+|----------|---------|
+| **Linux** | `curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh \| bash` |
+| **macOS** | `curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh \| bash` |
+| **Windows (PowerShell)** | `.\scripts\quickstart.ps1` (after cloning repo) |
+| **Windows (CMD)** | `.\scripts\quickstart.bat` (after cloning repo) |
+
+### Linux/macOS
+
+**From anywhere on your system (no repository needed):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
 ```
 
 or with wget:
-
 ```bash
 wget -qO- https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh | bash
 ```
 
-This will:
-- clone the repo (if missing),
-- update submodules,
-- create a venv,
-- install dependencies,
-- start the web dashboard at `http://127.0.0.1:8765`.
+**If you already have the repository:**
+```bash
+./scripts/quickstart.sh
+```
 
-## Clone and Install
+### Windows
 
-### Installation
+**Step 1: Clone the repository (first time only)**
+```powershell
+git clone https://github.com/nikolareljin/vigilant-core.git
+cd vigilant-core
+```
+
+**Step 2: Run the quickstart script**
+
+**PowerShell (Recommended):**
+```powershell
+.\scripts\quickstart.ps1
+```
+
+**Command Prompt:**
+```cmd
+.\scripts\quickstart.bat
+```
+
+> **Note:** Unlike Linux/macOS, Windows users need to clone the repository first. The remote curl/wget approach doesn't work well on Windows due to PowerShell execution policies.
+
+**What the quickstart scripts do:**
+- ✅ Install/check Python and Git
+- ✅ Clone or update the repository
+- ✅ Create and activate virtual environment
+- ✅ Install all Python dependencies
+- ✅ **Install Ollama CLI** (via official installer or winget)
+- ✅ **Start Ollama service**
+- ✅ **Download default AI model** (llama3.2:1b - ~900MB)
+- ✅ Launch the web dashboard at http://127.0.0.1:8765
+
+**First-time setup takes 5-10 minutes** (mostly downloading the AI model). Subsequent runs are instant.
+
+### Platform-Specific Notes
+
+**Linux:**
+- Requires `curl` or `wget` for remote installation
+- Ollama installed via official script from ollama.com
+- May require `sudo` for some package installations
+
+**macOS:**
+- Requires Homebrew for Ollama installation
+- If Homebrew not installed, get it from [brew.sh](https://brew.sh)
+- All installations work without sudo
+
+**Windows:**
+- Requires [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) for automatic Ollama installation
+- winget included with Windows 11 and Windows 10 (recent versions)
+- Alternative: Manual Ollama download from [ollama.com/download](https://ollama.com/download)
+- PowerShell: Run as user (no admin needed)
+- Command Prompt: Run as user (no admin needed)
+
+### Troubleshooting Quickstart
+
+**"Ollama installation failed"**
+- Download and install manually from [ollama.com/download](https://ollama.com/download)
+- Run the quickstart script again after installation
+
+**"Model download is slow"**
+- The llama3.2:1b model is ~900MB
+- Speed depends on your internet connection
+- You can cancel (Ctrl+C) and continue later with: `ollama pull llama3.2:1b`
+
+**"Python not found" or "Git not found"**
+- Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
+- Install Git from [git-scm.com](https://git-scm.com/downloads)
+- Ensure both are added to your system PATH
+
+## Manual Installation
+
+If you prefer manual setup or the quickstart script doesn't work for your system:
 1. Clone the repository
 2. Run the launcher script:
 

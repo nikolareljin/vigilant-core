@@ -75,4 +75,38 @@ source venv/bin/activate
 python3 -m pip install --upgrade pip
 pip3 install -r requirements.txt
 
+# Install Ollama CLI if not present
+if ! command -v ollama >/dev/null 2>&1; then
+  echo "Installing Ollama CLI..."
+  if [[ "$(uname)" == "Linux" ]]; then
+    curl -fsSL https://ollama.com/install.sh | sh
+  elif [[ "$(uname)" == "Darwin" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew install ollama
+    else
+      echo "Homebrew not found. Please install Ollama manually from https://ollama.com"
+      exit 1
+    fi
+  else
+    echo "Unsupported OS. Please install Ollama manually from https://ollama.com"
+    exit 1
+  fi
+fi
+
+# Start Ollama service in background
+if ! pgrep -x "ollama" >/dev/null; then
+  echo "Starting Ollama service..."
+  ollama serve >/dev/null 2>&1 &
+  sleep 3
+fi
+
+# Download default model if not already present
+DEFAULT_MODEL="llama3.2:1b"
+if ! ollama list | grep -q "${DEFAULT_MODEL}"; then
+  echo "Downloading Ollama model: ${DEFAULT_MODEL}..."
+  ollama pull "${DEFAULT_MODEL}"
+else
+  echo "Ollama model ${DEFAULT_MODEL} already available."
+fi
+
 python3 -m src.web_app

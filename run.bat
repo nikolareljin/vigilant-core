@@ -32,6 +32,40 @@ if errorlevel 1 (
     python -m pip install -q -r requirements.txt
 )
 
+REM Check for Ollama and install if needed
+where ollama >nul 2>&1
+if errorlevel 1 (
+    echo Ollama not found. Installing via winget...
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        winget install -e --id Ollama.Ollama --silent
+        echo Please restart this script after Ollama installation completes.
+        pause
+        exit /b 0
+    ) else (
+        echo Warning: winget not found. Install Ollama from https://ollama.com/download
+    )
+)
+
+REM Start Ollama service if not running and Ollama is available
+where ollama >nul 2>&1
+if not errorlevel 1 (
+    tasklist /FI "IMAGENAME eq ollama.exe" 2>NUL | find /I /N "ollama.exe">NUL
+    if errorlevel 1 (
+        echo Starting Ollama service...
+        start /B ollama serve
+        timeout /t 2 /nobreak >nul
+    )
+    
+    REM Download default model if not present
+    set "DEFAULT_MODEL=llama3.2:1b"
+    ollama list | find "!DEFAULT_MODEL!" >nul 2>&1
+    if errorlevel 1 (
+        echo Downloading Ollama model: !DEFAULT_MODEL!...
+        ollama pull !DEFAULT_MODEL! || echo Warning: Failed to download model.
+    )
+)
+
 REM Run the launcher with argument (default: web)
 if "%~1"=="" (
     python vigilant.py web
