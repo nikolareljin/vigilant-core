@@ -36,6 +36,34 @@ VigilantCore prioritizes local events using multiple methods:
 - Location name keyword matching
 - Optional relaxed filtering to include broader results
 
+### Automatic Local Source Discovery
+
+When you provide a ZIP code or coordinates, VigilantCore automatically discovers and monitors:
+
+**Weather & Emergency Alerts:**
+- NWS (National Weather Service) state-specific CAP alerts
+- Severe weather warnings for your area
+- National emergency broadcasts
+
+**Local Emergency Services:**
+- Police department alerts and news
+- Sheriff's office announcements
+- Fire department news and alerts
+- Emergency management office updates
+- Road closures and travel advisories
+
+**Utility Information:**
+- Power company outage maps and alerts
+- Electric utility service notifications
+- Gas and water utility alerts
+
+**Local News:**
+- County and city government news
+- Local TV station news feeds
+- Regional newspaper RSS feeds
+
+This discovery happens automatically based on your ZIP code - the app maps your ZIP to the correct state and searches for relevant local sources.
+
 ### Local AI Processing
 
 All AI processing happens locally on your machine:

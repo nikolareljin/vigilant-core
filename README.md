@@ -35,6 +35,11 @@ cd vigilant-core
 - **AI-Powered Insights**: Ask specific monitoring questions and get AI-generated answers
 - **Impact Scoring**: Every alert scored 1-10 for relevance and urgency
 - **Location-Aware**: Filter alerts by ZIP code, coordinates, or radius
+- **Automatic Local Discovery**: When you provide a ZIP code, automatically finds:
+  - NWS weather alerts for your state
+  - Local police, fire, and emergency management alerts
+  - Power company outage maps and utility alerts
+  - Local news and government sources
 - **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, and 30+ curated sources
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama
@@ -56,6 +61,30 @@ VigilantCore prefers local signals by combining:
 - ZIP-based geocoding (offline) to a center point.
 - Radius filtering (default 50km).
 - Keyword matching on location name and ZIP.
+
+## Automatic Local Source Discovery
+
+When you provide a ZIP code or coordinates, VigilantCore automatically discovers relevant local sources:
+
+**Weather & Emergency Alerts:**
+- NWS (National Weather Service) CAP alerts for your state
+- Severe weather warnings and advisories
+
+**Emergency Services:**
+- Local police department alerts
+- Fire department news
+- County emergency management updates
+- Road closures and travel advisories
+
+**Utilities:**
+- Power company outage information
+- Electric utility service alerts
+
+**Local News:**
+- County/city government news feeds
+- Local newspaper RSS feeds
+
+For example, ZIP code `08544` (Princeton, NJ) automatically adds NWS New Jersey alerts, searches for PSE&G outage info, and finds Mercer County emergency resources.
 
 ## Requirements
 - **Python 3.10+** (Linux/macOS)
@@ -203,7 +232,6 @@ Initial results of the search.
 Results view with the AI generated content:
 
 <img width="1920" height="934" alt="image" src="https://github.com/user-attachments/assets/a8520d98-1787-447a-8c7a-020f829aa2b3" />
-
 
 ### Qt Desktop App
 

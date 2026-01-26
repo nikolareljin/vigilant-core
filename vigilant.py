@@ -237,7 +237,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 
     if web_pid and is_process_running(web_pid):
         print(f"Web Dashboard: Running (PID {web_pid})")
-        print(f"  URL: http://127.0.0.1:8765")
+        print("  URL: http://127.0.0.1:8765")
     else:
         print("Web Dashboard: Stopped")
         if web_pid:

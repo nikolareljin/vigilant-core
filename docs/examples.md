@@ -18,9 +18,15 @@ Monitor winter storm conditions and potential power outages in your area.
 - Radius: `30 km`
 - Polling Interval: `5 minutes`
 
-**Custom RSS Feeds:**
+**Automatic Discovery:**
+With the ZIP code `08544`, VigilantCore automatically:
+- Adds NWS weather alerts for New Jersey (`https://alerts.weather.gov/cap/nj.php?x=0`)
+- Searches for PSE&G and JCP&L power outage information
+- Finds local emergency management feeds for Mercer County
+- Discovers local news sources covering the Princeton area
+
+**Optional Custom RSS Feeds:**
 ```
-https://alerts.weather.gov/cap/nj.php?x=0
 https://www.nj.com/news/rss/
 https://www.centraljersey.com/search/?f=rss
 ```
