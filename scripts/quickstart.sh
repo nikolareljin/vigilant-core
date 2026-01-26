@@ -72,7 +72,7 @@ fi
 
 # shellcheck disable=SC1091
 source venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python3 -m pip install --upgrade pip
+pip3 install -r requirements.txt
 
-python -m src.web_app
+python3 -m src.web_app
