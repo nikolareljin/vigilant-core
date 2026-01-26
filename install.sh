@@ -11,23 +11,23 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
+# Install Ollama CLI if not present
 if ! command -v ollama >/dev/null 2>&1; then
-  echo "Ollama not found. Installing in background..."
-  case "$(uname -s)" in
-    Linux)
-      (curl -fsSL https://ollama.com/install.sh | sh) >/tmp/ollama_install.log 2>&1 &
-      ;;
-    Darwin)
-      if command -v brew >/dev/null 2>&1; then
-        (brew install ollama/tap/ollama) >/tmp/ollama_install.log 2>&1 &
-      else
-        echo "Homebrew not found. Install Ollama from https://ollama.com/download and re-run."
-      fi
-      ;;
-    *)
-      echo "Unsupported OS for automatic Ollama install. Install from https://ollama.com/download."
-      ;;
-  esac
+  echo "Installing Ollama CLI..."
+  if [[ "$(uname)" == "Linux" ]]; then
+    curl -fsSL https://ollama.com/install.sh | sh
+  elif [[ "$(uname)" == "Darwin" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew install ollama
+    else
+      echo "Homebrew not found. Please install Ollama manually from https://ollama.com"
+      echo "Download from: https://ollama.com/download"
+      exit 1
+    fi
+  else
+    echo "Unsupported OS. Please install Ollama manually from https://ollama.com"
+    exit 1
+  fi
 fi
 
 if [ ! -d "venv" ]; then
@@ -39,5 +39,23 @@ source venv/bin/activate
 
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+
+# Start Ollama service in background if not running
+if command -v ollama >/dev/null 2>&1 && ! pgrep -x "ollama" >/dev/null; then
+  echo "Starting Ollama service..."
+  ollama serve >/dev/null 2>&1 &
+  sleep 3
+fi
+
+# Download default model if Ollama is available and model not present
+if command -v ollama >/dev/null 2>&1; then
+  DEFAULT_MODEL="llama3.2:1b"
+  if ! ollama list 2>/dev/null | grep -q "${DEFAULT_MODEL}"; then
+    echo "Downloading Ollama model: ${DEFAULT_MODEL}..."
+    ollama pull "${DEFAULT_MODEL}" || echo "Warning: Failed to download model. You can download it later."
+  else
+    echo "Ollama model ${DEFAULT_MODEL} already available."
+  fi
+fi
 
 python -m src.web_app
