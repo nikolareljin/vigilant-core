@@ -45,3 +45,5 @@ node_modules/
 # Tests
 tests/*.json
 
+
+/ignore/
