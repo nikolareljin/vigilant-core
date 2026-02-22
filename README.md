@@ -47,7 +47,7 @@ cd vigilant-core
 ## User Journey
 1. **First Run**: Open the app, enter your subject, location, and optional RSS feeds/API key.
 2. **Set Monitoring Question**: Ask a specific question like "When is the peak risk of power outage?"
-3. **Live Impact Feed**: The dashboard shows scored alerts with AI-generated insights.
+3. **Live Impact Feed**: The dashboard shows scored alerts with AI-generated insights (timestamps use the host's local time by default, or `DISPLAY_TIMEZONE` if set in `.env`).
 4. **Impact Scoring**: Each alert is ranked from 1–10 based on relevance and urgency.
 5. **Stay Informed**: New alerts appear in near real-time and are stored locally.
 

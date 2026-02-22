@@ -16,6 +16,7 @@ if str(ROOT_DIR) not in sys.path:
 from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
+from utils.timefmt import format_alert_timestamp  # noqa: E402
 
 
 def generate_insight(config: AppConfig) -> Optional[Dict]:
@@ -466,7 +467,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for row in database.fetch_recent(200):
             self.add_row(
                 {
-                    "created_at": row["created_at"],
+                    "created_at": format_alert_timestamp(row["created_at"], self.config.display_timezone),
                     "impact_score": row["impact_score"],
                     "title": row["title"],
                     "source": row["source"],
