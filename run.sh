@@ -29,6 +29,47 @@ is_port_in_use() {
   return 1
 }
 
+get_listening_pid() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n1 || true
+    return 0
+  fi
+  return 1
+}
+
+get_process_args() {
+  local pid="$1"
+  ps -p "$pid" -o args= 2>/dev/null || true
+}
+
+try_stop_stale_vigilant_web() {
+  local port="$1"
+  local pid args
+  pid="$(get_listening_pid "$port")"
+  if [[ -z "$pid" ]]; then
+    return 1
+  fi
+
+  args="$(get_process_args "$pid")"
+  case "$args" in
+    *"src.web_app"*|*"vigilant.py"*)
+      echo "Stopping stale VigilantCore web listener (PID ${pid})..."
+      kill "$pid" >/dev/null 2>&1 || true
+      sleep 1
+      if is_port_in_use "$port"; then
+        kill -9 "$pid" >/dev/null 2>&1 || true
+        sleep 1
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  ! is_port_in_use "$port"
+}
+
 ensure_web_port_available() {
   local port="$1"
   local mode="$2"
@@ -43,6 +84,9 @@ ensure_web_port_available() {
   echo "Port ${port} is already in use. Attempting to stop an existing VigilantCore web instance..."
   python vigilant.py stop >/dev/null 2>&1 || true
   sleep 1
+  if is_port_in_use "$port"; then
+    try_stop_stale_vigilant_web "$port" || true
+  fi
 
   if is_port_in_use "$port"; then
     echo "Error: Port ${port} is still in use."
