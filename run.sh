@@ -16,6 +16,46 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+is_port_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]${port}$"
+    return $?
+  fi
+  return 1
+}
+
+ensure_web_port_available() {
+  local port="$1"
+  local mode="$2"
+  if [[ "$mode" != "web" && "$mode" != "both" ]]; then
+    return 0
+  fi
+
+  if ! is_port_in_use "$port"; then
+    return 0
+  fi
+
+  echo "Port ${port} is already in use. Attempting to stop an existing VigilantCore web instance..."
+  python vigilant.py stop >/dev/null 2>&1 || true
+  sleep 1
+
+  if is_port_in_use "$port"; then
+    echo "Error: Port ${port} is still in use."
+    echo "Stop the process using it, or run './run.sh stop' if it's a stale VigilantCore instance."
+    if command -v lsof >/dev/null 2>&1; then
+      echo
+      echo "Listening process:"
+      lsof -iTCP:"$port" -sTCP:LISTEN || true
+    fi
+    exit 1
+  fi
+}
+
 # Create venv if needed
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
@@ -63,4 +103,6 @@ if command -v ollama >/dev/null 2>&1; then
 fi
 
 # Run the launcher
-exec python vigilant.py "${1:-web}"
+MODE="${1:-web}"
+ensure_web_port_available 8765 "$MODE"
+exec python vigilant.py "$MODE"

@@ -764,6 +764,7 @@ def api_insight() -> str:
 
 @app.route("/api/alerts")
 def api_alerts() -> str:
+    config = get_config()
     page = int(request.args.get("page", "1"))
     limit = int(request.args.get("limit", "10"))
     if page < 1:
