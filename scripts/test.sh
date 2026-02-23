@@ -33,8 +33,10 @@ else
   shlib_import logging
 fi
 
-print_info "No automated tests yet. Running smoke import check."
+print_info "Running smoke import check."
 cd "$ROOT_DIR"
 python -m pip install -r requirements.txt
 python -c "import engine.monitor, engine.parser, utils.database, utils.config, utils.sources, utils.geo, src.web_app; print('smoke ok')"
+print_info "Running platform compatibility unit tests."
+python -m unittest discover -s tests -p "test_platform_compat.py" -v
 print_success "Smoke check complete."

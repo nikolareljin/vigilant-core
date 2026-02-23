@@ -1,5 +1,4 @@
 ollama
-crawl4ai
 pyside6
 python-dotenv
 httpx
