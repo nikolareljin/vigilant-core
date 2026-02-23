@@ -23,6 +23,22 @@ class SearchResult:
     snippet: str
 
 
+EXTREME_CONTEXT_KEYWORDS: Dict[str, tuple[str, ...]] = {
+    "power": ("outage", "power", "electric", "grid", "blackout", "substation"),
+    "water": ("water", "main break", "boil advisory", "wastewater", "sewer"),
+    "gas": ("gas", "pipeline", "natural gas", "leak"),
+    "renewables": ("solar", "wind", "renewable", "battery storage"),
+    "transport": ("transport", "traffic", "road", "highway", "transit", "rail", "bridge"),
+    "aviation": ("airport", "airline", "flight", "faa", "ground stop", "runway"),
+    "fire": ("fire", "wildfire", "brush fire", "structure fire", "evacuation"),
+    "flood": ("flood", "flooding", "flash flood", "river crest"),
+    "tornado": ("tornado", "twister", "severe storm", "supercell"),
+    "winter": ("snow", "ice", "blizzard", "winter storm", "freeze"),
+    "earthquake": ("earthquake", "quake", "seismic", "aftershock"),
+    "conflict": ("war", "conflict", "missile", "drone strike", "invasion", "border clash"),
+}
+
+
 # US State abbreviations for NWS alerts
 US_STATES: Dict[str, str] = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
@@ -362,6 +378,17 @@ DEFAULT_SOURCES: List[Source] = [
     Source("Weather.gov", "https://www.weather.gov"),
     Source("NOAA", "https://www.noaa.gov"),
     Source("NWS Alerts", "https://alerts.weather.gov"),
+    Source("PowerOutage.us", "https://poweroutage.us"),
+    Source("FAA", "https://www.faa.gov"),
+    Source("FAA NAS Status", "https://nasstatus.faa.gov"),
+    Source("FlightAware", "https://www.flightaware.com"),
+    Source("FlightRadar24", "https://www.flightradar24.com"),
+    Source("InciWeb", "https://inciweb.wildfire.gov"),
+    Source("USGS Earthquake Hazards", "https://earthquake.usgs.gov"),
+    Source("GDACS", "https://www.gdacs.org"),
+    Source("ReliefWeb", "https://reliefweb.int"),
+    Source("NASA FIRMS", "https://firms.modaps.eosdis.nasa.gov"),
+    Source("INRIX Traffic", "https://inrix.com"),
     Source("Los Angeles Times", "https://www.latimes.com"),
     Source("Chicago Tribune", "https://www.chicagotribune.com"),
     Source("Miami Herald", "https://www.miamiherald.com"),
@@ -523,6 +550,156 @@ DEFAULT_SOURCES: List[Source] = [
     Source("Daily Monitor (Uganda)", "https://www.monitor.co.ug"),
     Source("ZBC News", "https://www.zbcnews.co.zw"),
 ]
+
+
+def _normalized_words(text: str) -> set[str]:
+    cleaned = (
+        text.lower()
+        .replace("/", " ")
+        .replace("-", " ")
+        .replace(",", " ")
+        .replace(":", " ")
+    )
+    return {w for w in cleaned.split() if w}
+
+
+def _subject_context_categories(subject: str) -> set[str]:
+    if not subject:
+        return set()
+    words = _normalized_words(subject)
+    categories: set[str] = set()
+    for category, keywords in EXTREME_CONTEXT_KEYWORDS.items():
+        if any((" " in kw and kw in subject.lower()) or (kw in words) for kw in keywords):
+            categories.add(category)
+    return categories
+
+
+def _google_news_rss(query: str) -> str:
+    return f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
+
+
+def build_contextual_google_news_feeds(
+    subject: str,
+    location_name: str,
+    zip_code: Optional[str] = None,
+    state_abbrev: Optional[str] = None,
+) -> List[str]:
+    """Build on-demand Google News RSS feeds for likely emergency/infrastructure contexts."""
+    feeds: List[str] = []
+    location_hint = " ".join(part for part in [location_name, zip_code] if part).strip()
+    state_name = get_state_name(state_abbrev) if state_abbrev else None
+    categories = _subject_context_categories(subject)
+    if not categories and location_hint:
+        categories = {"power", "transport", "fire", "flood", "tornado"}
+
+    queries: List[str] = []
+    if location_hint:
+        if "power" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} power outage",
+                    f"{location_hint} outage map utility",
+                    f"{location_hint} poweroutage.us",
+                ]
+            )
+        if "water" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} water utility alert",
+                    f"{location_hint} boil water advisory",
+                    f"{location_hint} water main break",
+                ]
+            )
+        if "gas" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} gas utility emergency",
+                    f"{location_hint} gas leak advisory",
+                    f"{location_hint} pipeline incident",
+                ]
+            )
+        if "renewables" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} wind farm outage",
+                    f"{location_hint} solar farm outage",
+                    f"{location_hint} grid battery fire",
+                ]
+            )
+        if "transport" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} traffic incident",
+                    f"{location_hint} road closure",
+                    f"{location_hint} transit alerts",
+                ]
+            )
+        if "aviation" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} airport delays",
+                    f"{location_hint} airline cancellations",
+                    f"{location_hint} FAA ground stop",
+                ]
+            )
+        if "fire" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} wildfire evacuation",
+                    f"{location_hint} fire alerts",
+                ]
+            )
+        if "flood" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} flood warning",
+                    f"{location_hint} flash flood emergency",
+                ]
+            )
+        if "tornado" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} tornado warning",
+                    f"{location_hint} severe thunderstorm warning",
+                ]
+            )
+        if "winter" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} winter storm warning",
+                    f"{location_hint} ice storm outage",
+                ]
+            )
+        if "earthquake" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} earthquake",
+                    f"{location_hint} seismic activity",
+                ]
+            )
+
+    # Global crisis/conflict monitoring (can be subject-driven even without ZIP)
+    if "conflict" in categories:
+        geo = location_hint or state_name or subject.strip()
+        if geo:
+            queries.extend(
+                [
+                    f"{geo} conflict escalation",
+                    f"{geo} war alerts",
+                    f"{geo} civilian evacuation",
+                    f"{geo} missile strike",
+                ]
+            )
+        queries.extend(["global conflict alerts", "war zone humanitarian crisis"])
+
+    if not queries and subject:
+        base_query = " ".join(part for part in [subject.strip(), location_hint] if part).strip()
+        if base_query:
+            queries.append(base_query)
+
+    for q in dict.fromkeys(q for q in queries if q):
+        feeds.append(_google_news_rss(q))
+    return feeds
 
 
 def _same_domain(base: str, candidate: str) -> bool:
@@ -816,6 +993,13 @@ def build_local_feeds(location_name: str, zip_code: Optional[str] = None) -> Lis
         f"{location_str} emergency management",
         f"{location_str} weather alert",
         f"{location_str} road closure",
+        f"{location_str} power outage",
+        f"{location_str} utility outage map",
+        f"{location_str} traffic incidents",
+        f"{location_str} transit alerts",
+        f"{location_str} airport delays",
+        f"{location_str} flood warning",
+        f"{location_str} tornado warning",
     ]
     feeds = []
     for q in feed_queries:
@@ -892,16 +1076,49 @@ def build_utility_search_queries(
         f"{location_hint} electric utility power outage",
         f"{location_hint} power company outage map",
         f"{location_hint} electric company service alerts",
+        f"{location_hint} outage restoration updates utility",
+        f"{location_hint} coop electric outage map",
+        f"{location_hint} municipal electric utility alerts",
+        f"site:poweroutage.us {location_hint} outage",
     ])
 
     if state_name:
-        queries.append(f"{state_name} power outage map")
+        queries.extend(
+            [
+                f"{state_name} power outage map",
+                f"site:poweroutage.us {state_name} outage map",
+                f"{state_name} electric grid outage emergency",
+            ]
+        )
 
     # Gas utility searches
-    queries.append(f"{location_hint} gas utility emergency")
+    queries.extend(
+        [
+            f"{location_hint} gas utility emergency",
+            f"{location_hint} natural gas outage",
+            f"{location_hint} gas leak advisory utility",
+            f"{location_hint} pipeline incident alerts",
+        ]
+    )
 
     # Water utility searches
-    queries.append(f"{location_hint} water utility alerts")
+    queries.extend(
+        [
+            f"{location_hint} water utility alerts",
+            f"{location_hint} boil water advisory",
+            f"{location_hint} water main break emergency",
+            f"{location_hint} wastewater utility outage",
+        ]
+    )
+
+    # Renewables / distributed energy incidents
+    queries.extend(
+        [
+            f"{location_hint} solar outage utility",
+            f"{location_hint} wind farm outage",
+            f"{location_hint} battery storage fire utility",
+        ]
+    )
 
     return queries
 
@@ -944,6 +1161,21 @@ def build_emergency_service_queries(
         f"{location_hint} road closure alerts",
         f"{location_hint} traffic alerts",
         f"{location_hint} department transportation alerts",
+        f"{location_hint} DOT traffic incidents",
+        f"{location_hint} transit service alerts",
+        f"{location_hint} rail service disruption",
+        f"{location_hint} airport operations alerts",
+        f"{location_hint} airline cancellations",
+        f"{location_hint} FAA ground stop",
+    ])
+
+    # Extreme weather / disaster specific
+    queries.extend([
+        f"{location_hint} flood warning alerts",
+        f"{location_hint} flash flood emergency",
+        f"{location_hint} tornado warning alerts",
+        f"{location_hint} wildfire evacuation alerts",
+        f"{location_hint} hazmat incident public safety",
     ])
 
     return queries
@@ -986,6 +1218,7 @@ def search_local_emergency_sources(
 
 def discover_emergency_feeds(
     location_name: str,
+    subject: str = "",
     zip_code: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
@@ -1000,7 +1233,16 @@ def discover_emergency_feeds(
 
     # Add NWS weather feeds first (most reliable)
     nws_feeds = build_nws_weather_feeds(zip_code, state_abbrev)
-    feeds.extend(nws_feeds)
+    for feed in nws_feeds:
+        if feed not in feeds:
+            feeds.append(feed)
+
+    # Add contextual Google News feeds for outages/disasters/transport/aviation/conflict
+    for feed in build_contextual_google_news_feeds(subject, location_name, zip_code, state_abbrev):
+        if feed not in feeds:
+            feeds.append(feed)
+        if len(feeds) >= max_feeds:
+            return feeds[:max_feeds]
 
     # Build search queries
     emergency_queries = build_emergency_service_queries(
@@ -1016,10 +1258,15 @@ def discover_emergency_feeds(
             f"{location_hint} county emergency alerts RSS",
             f"{location_hint} city government news RSS",
             f"{location_hint} local news RSS feed",
+            f"{location_hint} utility outage RSS",
+            f"{location_hint} traffic alerts RSS",
+            f"{location_hint} airport alerts RSS",
         ]
         if state_name:
             targeted_queries.append(f"{state_name} emergency management RSS")
             targeted_queries.append(f"{state_name} state police alerts RSS")
+            targeted_queries.append(f"{state_name} power outage RSS")
+            targeted_queries.append(f"{state_name} DOT traffic alerts RSS")
 
     all_queries = emergency_queries[:6] + utility_queries[:4] + targeted_queries
 
@@ -1035,6 +1282,11 @@ def discover_emergency_feeds(
         "alerts/feed",
         "press/rss",
         "media/rss",
+        "outages/rss",
+        "status/rss",
+        "incidents/rss",
+        "traffic/rss",
+        "transit/rss",
     )
 
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
@@ -1072,7 +1324,7 @@ def discover_emergency_feeds(
                     if _validate_feed(candidate, client):
                         feeds.append(candidate)
 
-    return feeds
+    return feeds[:max_feeds]
 
 
 def build_comprehensive_local_feeds(
@@ -1106,6 +1358,10 @@ def build_comprehensive_local_feeds(
     for feed in build_local_feeds(location_name, zip_code):
         add_feed(feed)
 
+    # 2b. Subject-driven Google News topic feeds for outages, disasters, transport, conflict, etc.
+    for feed in build_contextual_google_news_feeds(subject, location_name, zip_code, state_abbrev):
+        add_feed(feed)
+
     # 3. Subject + location Google News feed
     if subject and location_name:
         query_parts = [subject, location_name]
@@ -1117,7 +1373,12 @@ def build_comprehensive_local_feeds(
     # 4. Emergency services and utility feeds (discovered)
     try:
         emergency_feeds = discover_emergency_feeds(
-            location_name, zip_code, latitude, longitude, max_feeds=15
+            subject=subject,
+            location_name=location_name,
+            zip_code=zip_code,
+            latitude=latitude,
+            longitude=longitude,
+            max_feeds=20,
         )
         for feed in emergency_feeds:
             add_feed(feed)
@@ -1187,9 +1448,42 @@ def search_emergency_info(
                 f"{location_hint} travel advisory",
             ])
 
+    # Always add local emergency/utility/transport searches when a location is provided
+    if location_hint:
+        queries.extend(
+            build_emergency_service_queries(location_name, zip_code, latitude, longitude)
+        )
+        queries.extend(build_utility_search_queries(location_name, zip_code, state_abbrev))
+
+    subject_lower = (subject or "").lower()
+    conflict_keywords = EXTREME_CONTEXT_KEYWORDS["conflict"]
+    if subject and any(kw in subject_lower for kw in conflict_keywords):
+        conflict_geo = location_hint or state_name or subject
+        queries.extend(
+            [
+                f"{conflict_geo} war conflict updates",
+                f"{conflict_geo} missile/drone attack alerts",
+                f"{conflict_geo} civilian evacuation alerts",
+                f"site:reliefweb.int {conflict_geo} conflict",
+                f"site:gdacs.org {conflict_geo}",
+                f"site:aljazeera.com {conflict_geo} conflict",
+                f"site:reuters.com {conflict_geo} conflict",
+            ]
+        )
+
+    # Infrastructure + aviation domain-targeted searches for faster signal discovery
+    if location_hint:
+        queries.extend(
+            [
+                f"site:poweroutage.us {location_hint}",
+                f"site:faa.gov {location_hint} airport delays",
+                f"site:nasstatus.faa.gov {location_hint}",
+            ]
+        )
+
     # Search with the queries
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
-        for query in queries[:12]:  # Limit queries
+        for query in list(dict.fromkeys(q for q in queries if q))[:24]:  # Limit queries
             if len(results) >= max_results:
                 break
             for result in _search_duckduckgo_results(query, client)[:5]:

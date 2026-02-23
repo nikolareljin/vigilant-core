@@ -44,9 +44,12 @@ cd vigilant-core
 - **Automatic Local Discovery**: When you provide a ZIP code, automatically finds:
   - NWS weather alerts for your state
   - Local police, fire, and emergency management alerts
-  - Power company outage maps and utility alerts
+  - Power outage maps (including `poweroutage.us` search coverage) and utility alerts
+  - Water, gas, solar, and wind infrastructure incident signals
+  - Transportation/traffic/transit/airport and airline disruption signals
   - Local news and government sources
-- **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, and 30+ curated sources
+- **Context-Aware Extreme Event Coverage**: Flooding, tornadoes, wildfires, winter storms, earthquakes, industrial incidents, and conflict/crisis monitoring queries
+- **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama
 
@@ -85,10 +88,21 @@ When you provide a ZIP code or coordinates, VigilantCore automatically discovers
 **Utilities:**
 - Power company outage information
 - Electric utility service alerts
+- Water utility advisories and boil-water alerts
+- Gas utility emergencies and leak notices
+- Renewable energy infrastructure incidents (solar/wind) when relevant
 
 **Local News:**
 - County/city government news feeds
 - Local newspaper RSS feeds
+
+**Transportation & Critical Infrastructure:**
+- Traffic and DOT incident updates
+- Transit/rail service disruption alerts
+- Airport/airline delay and cancellation signals
+
+**Global Crisis / Conflict (subject-driven):**
+- If your subject mentions war/conflict/crisis terms, VigilantCore expands search/feed queries for international conflict and humanitarian risk updates
 
 For example, ZIP code `08544` (Princeton, NJ) automatically adds NWS New Jersey alerts, searches for PSE&G outage info, and finds Mercer County emergency resources.
 

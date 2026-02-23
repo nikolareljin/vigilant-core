@@ -56,11 +56,26 @@ When you provide a ZIP code or coordinates, VigilantCore automatically discovers
 - Power company outage maps and alerts
 - Electric utility service notifications
 - Gas and water utility alerts
+- Power outage aggregator lookups (including `poweroutage.us` search coverage)
+- Renewable energy infrastructure incidents (solar/wind) when relevant
 
 **Local News:**
 - County and city government news
 - Local TV station news feeds
 - Regional newspaper RSS feeds
+
+**Transportation & Operations:**
+- Traffic incidents and road closures
+- Transit and rail disruption alerts
+- Airport operations alerts and airline delay/cancellation signals
+
+**Extreme Situations (Context-Aware):**
+- Flooding / flash flood warnings
+- Tornado and severe storm warnings
+- Wildfire / evacuation alerts
+- Winter storm / ice disruption signals
+- Earthquake / seismic incident signals
+- Conflict / war / humanitarian crisis updates (subject-driven global monitoring)
 
 This discovery happens automatically based on your ZIP code - the app maps your ZIP to the correct state and searches for relevant local sources.
 
@@ -82,6 +97,7 @@ Without any API keys, VigilantCore provides:
 2. **Google News RSS** - Auto-generated queries for your subject
 3. **Reddit Search RSS** - Social media monitoring
 4. **Local Discovery** - Attempts to find local news and government RSS feeds
+5. **Contextual Emergency Search** - Subject-aware outage/disaster/transport/conflict searches when location and context are provided
 
 ### Optional API Integrations
 

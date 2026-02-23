@@ -2,6 +2,19 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Expanded outage and infrastructure monitoring coverage**: Added context-aware source/query generation for power outages (including `poweroutage.us` searches), local utility signals (electric/water/gas), renewable infrastructure incidents (solar/wind), and transportation disruptions (traffic/transit/rail/airlines/airports).
+- **Broader extreme event and crisis discovery**: Added subject-driven query/feed expansion for flooding, tornadoes, wildfires, winter storms, earthquakes, hazmat incidents, and global conflict/humanitarian crisis scenarios.
+- **Curated signal source expansion**: Added additional curated source domains used for discovery/search seeding across outage, aviation, wildfire, disaster, and crisis contexts (e.g., FAA/NAS status, InciWeb, USGS earthquake, GDACS, ReliefWeb).
+
+### Changed
+
+- **Local feed generation**: Comprehensive local feed discovery now injects context-aware Google News RSS queries for likely outage/disaster/transport/conflict scenarios based on the monitored subject and location.
+- **Emergency search coverage**: Emergency search now adds local utility and transportation domain-targeted searches (including `site:poweroutage.us`) and conflict-focused queries when the subject indicates war/conflict conditions.
+
 ## [0.2.2] - 2026-02-23
 
 ### Added
