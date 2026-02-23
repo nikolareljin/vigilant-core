@@ -9,11 +9,12 @@ All notable changes to VigilantCore will be documented in this file.
 - **Live Impact Feed timestamps**: Web and Qt Live Impact Feed timestamps now display in the current host's local timezone by default instead of raw stored UTC-like values.
 - **Timezone override support**: Added optional `.env` setting `DISPLAY_TIMEZONE` (IANA timezone, e.g. `America/New_York`) to force a specific UI timezone for alert timestamps.
 - **Qt live feed timestamp consistency**: New alerts inserted during active monitoring are now formatted with the same local/configured timezone conversion as rows loaded from SQLite.
-- **Qt settings save timezone preservation**: Saving settings from the Qt dialog now preserves an existing `DISPLAY_TIMEZONE` override instead of dropping it.
+- **Qt settings save timezone preservation**: Saving settings from the Qt dialog now preserves an existing `DISPLAY_TIMEZONE` override in the generated `.env` output instead of dropping it.
+- **Timezone configuration validation**: Invalid `DISPLAY_TIMEZONE` / `TIMEZONE` values now warn and fall back to host local time instead of failing silently.
+- **Launcher parity**: Windows launchers now perform the same best-effort stale web-listener cleanup as `run.sh` before starting `web`/`both`.
 
 ### Changed
-
-- Preserved `DISPLAY_TIMEZONE` in saved `.env` output so UI saves keep the timezone override.
+- `TIMEZONE` remains supported as a legacy fallback when `DISPLAY_TIMEZONE` is unset (now documented).
 
 ## [0.2.0] - 2026-01-26
 

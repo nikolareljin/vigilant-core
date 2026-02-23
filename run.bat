@@ -10,8 +10,12 @@ REM   run.bat stop     - Stop all instances
 REM   run.bat status   - Check status
 
 setlocal
+setlocal EnableDelayedExpansion
 
 cd /d "%~dp0"
+
+set "MODE=%~1"
+if "%MODE%"=="" set "MODE=web"
 
 REM Create venv if needed
 if not exist "venv" (
@@ -66,11 +70,44 @@ if not errorlevel 1 (
     )
 )
 
+REM Ensure web port is available for web/both modes (best-effort parity with run.sh)
+if /I "%MODE%"=="web" call :ensure_web_port_available
+if /I "%MODE%"=="both" call :ensure_web_port_available
+
 REM Run the launcher with argument (default: web)
-if "%~1"=="" (
-    python vigilant.py web
-) else (
-    python vigilant.py %1
-)
+python vigilant.py %MODE%
 
 endlocal
+exit /b %ERRORLEVEL%
+
+:ensure_web_port_available
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":8765 .*LISTENING"') do set "PORTPID=%%P" & goto :port_found
+goto :eof
+
+:port_found
+echo Port 8765 is already in use. Attempting to stop an existing VigilantCore web instance...
+python vigilant.py stop >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+set "PORTPID="
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":8765 .*LISTENING"') do set "PORTPID=%%P" & goto :port_check
+goto :eof
+
+:port_check
+if not defined PORTPID goto :eof
+for /f "tokens=1,*" %%A in ('tasklist /FI "PID eq %PORTPID%" /FO CSV /NH 2^>nul') do set "PROCNAME=%%~A"
+if /I "%PROCNAME%"=="python.exe" (
+    echo Stopping stale VigilantCore web listener (PID %PORTPID%)...
+    taskkill /PID %PORTPID% /T /F >nul 2>&1
+    timeout /t 1 /nobreak >nul
+)
+
+set "PORTPID="
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":8765 .*LISTENING"') do set "PORTPID=%%P" & goto :port_still_busy
+goto :eof
+
+:port_still_busy
+echo Error: Port 8765 is still in use.
+echo Stop the process using it, or run "run.bat stop" if it's a stale VigilantCore instance.
+netstat -ano | findstr /R /C:":8765 .*LISTENING"
+exit /b 1

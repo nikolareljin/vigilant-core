@@ -10,8 +10,30 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python <3.9 fallback
+    ZoneInfo = None  # type: ignore[assignment]
 
 APP_NAME = "VigilantCore"
+
+
+def _load_display_timezone_from_env() -> Optional[str]:
+    """Read DISPLAY_TIMEZONE (preferred) or TIMEZONE (legacy fallback) and validate it."""
+    tz_name = os.getenv("DISPLAY_TIMEZONE") or os.getenv("TIMEZONE")
+    if not tz_name:
+        return None
+    if ZoneInfo is None:
+        return tz_name
+    try:
+        ZoneInfo(tz_name)
+    except Exception:
+        print(
+            f"Warning: Invalid timezone '{tz_name}' in DISPLAY_TIMEZONE/TIMEZONE; falling back to host local time.",
+            file=sys.stderr,
+        )
+        return None
+    return tz_name
 
 
 @dataclass
@@ -77,7 +99,7 @@ def load_config() -> AppConfig:
         load_dotenv(env_path())
         cfg = AppConfig()
         cfg.news_api_key = os.getenv("NEWS_API_KEY")
-        cfg.display_timezone = os.getenv("DISPLAY_TIMEZONE") or os.getenv("TIMEZONE")
+        cfg.display_timezone = _load_display_timezone_from_env()
         cfg.google_cse_api_key = os.getenv("GOOGLE_CSE_API_KEY")
         cfg.google_cse_cx = os.getenv("GOOGLE_CSE_CX")
         cfg.bing_search_key = os.getenv("BING_SEARCH_KEY")
@@ -118,7 +140,7 @@ def load_config() -> AppConfig:
         enable_duckduckgo_search=bool(data.get("enable_duckduckgo_search", True)),
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
-    cfg.display_timezone = cfg.display_timezone or os.getenv("DISPLAY_TIMEZONE") or os.getenv("TIMEZONE")
+    cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
     cfg.google_cse_api_key = cfg.google_cse_api_key or os.getenv("GOOGLE_CSE_API_KEY")
     cfg.google_cse_cx = cfg.google_cse_cx or os.getenv("GOOGLE_CSE_CX")
     cfg.bing_search_key = cfg.bing_search_key or os.getenv("BING_SEARCH_KEY")

@@ -15,7 +15,7 @@ VigilantCore stores configuration in a platform-specific location and can also r
 ### Environment File
 
 API keys are stored in a `.env` file in the same directory as `config.json`.
-You can also set `DISPLAY_TIMEZONE` there to force a specific timezone for alert timestamps shown in the Live Impact Feed (web and Qt); otherwise the app uses the current host's local timezone.
+You can also set `DISPLAY_TIMEZONE` there to force a specific timezone for alert timestamps shown in the Live Impact Feed (web and Qt); otherwise the app uses the current host's local timezone. For compatibility, `TIMEZONE` is also accepted as a fallback when `DISPLAY_TIMEZONE` is not set.
 
 ## Configuration Options
 
@@ -100,6 +100,8 @@ export NEWS_API_KEY=your_key_here
 
 # Optional UI timestamp timezone (defaults to this computer's local time)
 export DISPLAY_TIMEZONE=America/New_York
+# Legacy fallback (used only if DISPLAY_TIMEZONE is unset)
+export TIMEZONE=America/New_York
 
 # Google Custom Search
 export GOOGLE_CSE_API_KEY=your_key_here

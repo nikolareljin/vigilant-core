@@ -35,6 +35,20 @@ get_listening_pid() {
     lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n1 || true
     return 0
   fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -tlnp 2>/dev/null | awk -v port="$port" '
+      NR > 1 && $4 ~ ("[:.]" port "$") {
+        pid = $NF
+        sub(/.*pid=/, "", pid)
+        sub(/,.*/, "", pid)
+        if (pid ~ /^[0-9]+$/) {
+          print pid
+          exit
+        }
+      }
+    ' || true
+    return 0
+  fi
   return 1
 }
 
