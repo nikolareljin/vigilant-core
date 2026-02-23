@@ -19,6 +19,8 @@ All notable changes to VigilantCore will be documented in this file.
 - **Local feed generation**: Comprehensive local feed discovery now injects context-aware Google News RSS queries for likely outage/disaster/transport/conflict scenarios based on the monitored subject and location.
 - **Emergency search coverage**: Emergency search now adds local utility and transportation domain-targeted searches (including `site:poweroutage.us`) and conflict-focused queries when the subject indicates war/conflict conditions.
 - **Coordinate-driven discovery**: Region/source selection can now infer regional coverage directly from latitude/longitude when no ZIP code or location text is provided.
+- **Network discovery performance**: Feed discovery now caches page HTML/feed validation results in-process and deduplicates repeated base-url scans to reduce startup/network request volume.
+- **Low-bandwidth/tethered mode**: Added a settings toggle that reduces discovery/query budgets, caps contextual feeds and RSS breadth, and lowers emergency/DDG request sizes for constrained connections.
 
 ### Fixed
 
@@ -30,11 +32,6 @@ All notable changes to VigilantCore will be documented in this file.
 - **DuckDuckGo toggle persistence**: `ENABLE_DUCKDUCKGO_SEARCH=false` now persists in `.env` when disabled.
 - **Shared insight helpers**: Suggestion normalization helpers are centralized in `utils/insight.py` to avoid web/Qt drift.
 - **Region overlap precedence**: Region overlap behavior is explicitly documented and preserved with deterministic precedence for border regions.
-
-### Changed
-
-- **Network discovery performance**: Feed discovery now caches page HTML/feed validation results in-process and deduplicates repeated base-url scans to reduce startup/network request volume.
-- **Low-bandwidth/tethered mode**: Added a settings toggle that reduces discovery/query budgets, caps contextual feeds and RSS breadth, and lowers emergency/DDG request sizes for constrained connections.
 
 ### Details
 
