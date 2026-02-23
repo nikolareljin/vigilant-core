@@ -2,6 +2,12 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.2.2] - Unreleased
+
+### Fixed
+
+- **Release auto-tagging CI**: Added the `ci-helpers` `auto-tag-release-push` workflow so merges of `release/*` branches into `main`/`master` automatically create and push the matching release tag.
+
 ## [0.2.1] - 2026-02-22
 
 ### Fixed
