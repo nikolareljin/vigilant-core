@@ -64,6 +64,26 @@ class ConfigPathTests(unittest.TestCase):
                 fake_home / "Library" / "Application Support" / self.config_mod.APP_NAME,
             )
 
+    def test_config_dir_linux_uses_xdg_config_home(self) -> None:
+        with (
+            mock.patch.object(self.config_mod.sys, "platform", "linux"),
+            mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/home/test/.config"}, clear=False),
+        ):
+            self.assertEqual(
+                self.config_mod.config_dir(),
+                Path("/home/test/.config") / self.config_mod.APP_NAME,
+            )
+
+    def test_data_dir_linux_uses_xdg_data_home(self) -> None:
+        with (
+            mock.patch.object(self.config_mod.sys, "platform", "linux"),
+            mock.patch.dict(os.environ, {"XDG_DATA_HOME": "/home/test/.local/share"}, clear=False),
+        ):
+            self.assertEqual(
+                self.config_mod.data_dir(),
+                Path("/home/test/.local/share") / self.config_mod.APP_NAME,
+            )
+
 
 class LauncherPlatformTests(unittest.TestCase):
     def test_get_python_uses_windows_venv_layout(self) -> None:
@@ -96,6 +116,21 @@ class LauncherPlatformTests(unittest.TestCase):
             ):
                 self.assertEqual(vigilant.get_python(), str(posix_python))
 
+    def test_get_python_uses_linux_venv_layout(self) -> None:
+        import vigilant
+
+        with tempfile.TemporaryDirectory() as tmp:
+            venv_dir = Path(tmp) / "venv"
+            posix_python = venv_dir / "bin" / "python"
+            posix_python.parent.mkdir(parents=True, exist_ok=True)
+            posix_python.write_text("", encoding="utf-8")
+
+            with (
+                mock.patch.object(vigilant, "VENV_DIR", venv_dir),
+                mock.patch.object(vigilant.sys, "platform", "linux"),
+            ):
+                self.assertEqual(vigilant.get_python(), str(posix_python))
+
     def test_start_web_background_windows_uses_detached_process_flags(self) -> None:
         import vigilant
 
@@ -109,11 +144,15 @@ class LauncherPlatformTests(unittest.TestCase):
             mock.patch.object(vigilant, "save_pid") as save_pid_mock,
         ):
             pid = vigilant.start_web(background=True)
+            expected_flags = (
+                vigilant.subprocess.CREATE_NEW_PROCESS_GROUP
+                | vigilant.subprocess.DETACHED_PROCESS
+            )
 
         self.assertEqual(pid, 3210)
         save_pid_mock.assert_called_once_with("web", 3210)
         kwargs = popen_mock.call_args.kwargs
-        self.assertIn("creationflags", kwargs)
+        self.assertEqual(kwargs["creationflags"], expected_flags)
         self.assertEqual(kwargs["stdout"], vigilant.subprocess.DEVNULL)
         self.assertEqual(kwargs["stderr"], vigilant.subprocess.DEVNULL)
 
@@ -131,6 +170,25 @@ class LauncherPlatformTests(unittest.TestCase):
 
         self.assertEqual(pid, 6543)
         save_pid_mock.assert_called_once_with("web", 6543)
+        kwargs = popen_mock.call_args.kwargs
+        self.assertTrue(kwargs.get("start_new_session"))
+        self.assertEqual(kwargs["stdout"], vigilant.subprocess.DEVNULL)
+        self.assertEqual(kwargs["stderr"], vigilant.subprocess.DEVNULL)
+
+    def test_start_web_background_linux_uses_new_session(self) -> None:
+        import vigilant
+
+        fake_proc = types.SimpleNamespace(pid=7777)
+        with (
+            mock.patch.object(vigilant, "get_python", return_value="python"),
+            mock.patch.object(vigilant.sys, "platform", "linux"),
+            mock.patch.object(vigilant.subprocess, "Popen", return_value=fake_proc) as popen_mock,
+            mock.patch.object(vigilant, "save_pid") as save_pid_mock,
+        ):
+            pid = vigilant.start_web(background=True)
+
+        self.assertEqual(pid, 7777)
+        save_pid_mock.assert_called_once_with("web", 7777)
         kwargs = popen_mock.call_args.kwargs
         self.assertTrue(kwargs.get("start_new_session"))
         self.assertEqual(kwargs["stdout"], vigilant.subprocess.DEVNULL)
