@@ -20,6 +20,13 @@ All notable changes to VigilantCore will be documented in this file.
 - **Emergency search coverage**: Emergency search now adds local utility and transportation domain-targeted searches (including `site:poweroutage.us`) and conflict-focused queries when the subject indicates war/conflict conditions.
 - **Coordinate-driven discovery**: Region/source selection can now infer regional coverage directly from latitude/longitude when no ZIP code or location text is provided.
 
+### Fixed
+
+- **US region inference fallback**: Plain US city inputs (for example `Dallas` / `Austin`) no longer fall through to the Europe profile when ZIP/coordinates are omitted.
+- **Central America coordinate bounds**: Narrowed the coordinate classifier to avoid routing southern US coordinates (for example Houston / Gulf Coast) into the Central America profile.
+- **Conflict keyword false positives**: Conflict query expansion now uses token/phrase matching and avoids substring matches such as `hardware` triggering `war`.
+- **AI suggestions toggle persistence**: Saving settings now removes a stale `.env` file when no env-backed overrides remain, so re-enabling AI suggestions is not overridden by an old `ENABLE_AI_SUGGESTIONS=false`.
+
 ### Details
 
 - Added region profiles with localized Google News parameters (`gl`, `hl`, `ceid`) and region-specific utility/transport/emergency query terms.
