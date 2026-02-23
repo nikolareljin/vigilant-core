@@ -19,6 +19,10 @@ from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
 from utils.geo import detect_geo  # noqa: E402
+from utils.insight import (  # noqa: E402
+    normalize_suggestions as _normalize_suggestions,
+    normalize_suggestions_origin as _normalize_suggestions_origin,
+)
 from utils.sources import (  # noqa: E402
     ensure_seed_feeds,
     infer_region_profile,
@@ -727,39 +731,6 @@ def _source_preview_payload(config: AppConfig) -> dict:
         "source_count": len(urls),
         "urls": urls,
     }
-
-
-def _normalize_suggestions(value) -> list[str]:
-    if isinstance(value, list):
-        cleaned = []
-        for item in value:
-            text = str(item).strip()
-            if text:
-                cleaned.append(text)
-        return cleaned[:5]
-    if isinstance(value, str):
-        lines = [line.strip("-• \t") for line in value.splitlines()]
-        cleaned = [line for line in lines if line]
-        if cleaned:
-            return cleaned[:5]
-    return []
-
-
-def _normalize_suggestions_origin(value, suggestions: list[str]) -> str:
-    if not suggestions:
-        return "none"
-    if isinstance(value, str):
-        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
-        aliases = {
-            "official": "official_paraphrase",
-            "official_only": "official_paraphrase",
-            "paraphrase": "official_paraphrase",
-            "ai": "ai_assisted",
-        }
-        normalized = aliases.get(normalized, normalized)
-        if normalized in {"official_paraphrase", "ai_assisted", "mixed"}:
-            return normalized
-    return "ai_assisted"
 
 
 @app.route("/favicon.ico")

@@ -16,41 +16,11 @@ if str(ROOT_DIR) not in sys.path:
 from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
+from utils.insight import (  # noqa: E402
+    normalize_suggestions as _normalize_suggestions,
+    normalize_suggestions_origin as _normalize_suggestions_origin,
+)
 from utils.timefmt import format_alert_timestamp  # noqa: E402
-
-
-def _normalize_suggestions(value) -> list[str]:
-    if isinstance(value, list):
-        cleaned = []
-        for item in value:
-            text = str(item).strip()
-            if text:
-                cleaned.append(text)
-        return cleaned[:5]
-    if isinstance(value, str):
-        lines = [line.strip("-• \t") for line in value.splitlines()]
-        cleaned = [line for line in lines if line]
-        if cleaned:
-            return cleaned[:5]
-    return []
-
-
-def _normalize_suggestions_origin(value, suggestions: list[str]) -> str:
-    if not suggestions:
-        return "none"
-    if isinstance(value, str):
-        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
-        aliases = {
-            "official": "official_paraphrase",
-            "official_only": "official_paraphrase",
-            "paraphrase": "official_paraphrase",
-            "ai": "ai_assisted",
-        }
-        normalized = aliases.get(normalized, normalized)
-        if normalized in {"official_paraphrase", "ai_assisted", "mixed"}:
-            return normalized
-    # Conservative fallback: if the model returned suggestions but no origin, treat as AI-assisted.
-    return "ai_assisted"
 
 
 def generate_insight(config: AppConfig) -> Optional[Dict]:

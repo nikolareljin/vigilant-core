@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Dict, List, Optional
 from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 
@@ -897,6 +898,63 @@ def _normalized_words(text: str) -> set[str]:
     return {w for w in cleaned.split() if w}
 
 
+_US_STATE_NAMES: set[str] = {
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut",
+    "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa",
+    "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan",
+    "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada",
+    "new hampshire", "new jersey", "new mexico", "new york", "north carolina",
+    "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island",
+    "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont",
+    "virginia", "washington", "west virginia", "wisconsin", "wyoming",
+    "district of columbia", "dc",
+}
+
+_US_CITY_HINTS: set[str] = {
+    "new york", "los angeles", "chicago", "houston", "phoenix", "philadelphia",
+    "san antonio", "san diego", "dallas", "austin", "jacksonville", "fort worth",
+    "columbus", "charlotte", "san francisco", "indianapolis", "seattle", "denver",
+    "washington", "boston", "el paso", "nashville", "detroit", "oklahoma city",
+    "portland", "las vegas", "memphis", "louisville", "baltimore", "milwaukee",
+    "albuquerque", "tucson", "fresno", "mesa", "sacramento", "atlanta",
+    "kansas city", "miami", "raleigh", "omaha", "long beach", "virginia beach",
+    "oakland", "minneapolis", "tulsa", "tampa", "new orleans", "cleveland",
+    "honolulu", "orlando", "pittsburgh", "cincinnati", "st louis", "salt lake city",
+    "boise", "anchorage",
+}
+
+
+def _looks_like_us_location_text(location_name: str) -> bool:
+    text = (location_name or "").strip()
+    if not text:
+        return False
+    haystack = text.lower()
+    if "usa" in haystack or "united states" in haystack or "u.s." in haystack:
+        return True
+    if any(state in haystack for state in _US_STATE_NAMES):
+        return True
+    if re.search(r",\s*(?:[A-Z]{2})(?:\b|$)", text):
+        return True
+    if haystack in _US_CITY_HINTS:
+        return True
+
+    # Preserve legacy US-first behavior for common plain city/locality inputs.
+    words = [w for w in _normalized_words(text) if w]
+    if not words:
+        return False
+    if len(words) <= 3 and all(w.isalpha() for w in words):
+        return True
+    return False
+
+
+def _subject_has_any_keyword(subject: str, keywords: set[str] | tuple[str, ...]) -> bool:
+    if not subject:
+        return False
+    subject_lower = subject.lower()
+    words = _normalized_words(subject)
+    return any((" " in kw and kw in subject_lower) or (kw in words) for kw in keywords)
+
+
 def _infer_region_from_coords(
     latitude: Optional[float],
     longitude: Optional[float],
@@ -910,7 +968,7 @@ def _infer_region_from_coords(
     if 24 <= lat <= 84 and -170 <= lon <= -52:
         if lat >= 41 and -141 <= lon <= -52:
             return REGION_PROFILES["canada"]
-        if 7 <= lat <= 33 and -118 <= lon <= -77:
+        if 7 <= lat <= 19.5 and -93.5 <= lon <= -76:
             return REGION_PROFILES["central_america"]
         return REGION_PROFILES["us"]
 
@@ -956,7 +1014,7 @@ def infer_region_profile(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
 ) -> RegionProfile:
-    """Infer a monitoring region/country profile from location text and ZIP code."""
+    """Infer a monitoring region/country profile from location text, ZIP code, and optional coordinates."""
     if zip_code and get_state_from_zip(zip_code):
         return REGION_PROFILES["us"]
 
@@ -985,6 +1043,8 @@ def infer_region_profile(
 
     # Default to US behavior if no location is provided; otherwise Europe-first for international text.
     if not haystack.strip():
+        return REGION_PROFILES["us"]
+    if _looks_like_us_location_text(location_name):
         return REGION_PROFILES["us"]
     return REGION_PROFILES["europe"]
 
@@ -1954,7 +2014,7 @@ def search_emergency_info(
 
         # Power/utility related if relevant keywords in subject
         power_keywords = {"storm", "weather", "outage", "power", "electric", "winter", "ice", "snow", "wind"}
-        if any(kw in subject.lower() for kw in power_keywords):
+        if _subject_has_any_keyword(subject, power_keywords):
             queries.extend([
                 f"{location_hint} power outage",
                 f"{location_hint} electric utility outage map",
@@ -1965,7 +2025,7 @@ def search_emergency_info(
 
         # Road conditions if relevant
         road_keywords = {"storm", "weather", "snow", "ice", "flood", "road", "travel", "drive"}
-        if any(kw in subject.lower() for kw in road_keywords):
+        if _subject_has_any_keyword(subject, road_keywords):
             queries.extend([
                 f"{location_hint} road conditions",
                 f"{location_hint} road closure",
@@ -1979,9 +2039,7 @@ def search_emergency_info(
         )
         queries.extend(build_utility_search_queries(location_name, zip_code, state_abbrev))
 
-    subject_lower = (subject or "").lower()
-    conflict_keywords = EXTREME_CONTEXT_KEYWORDS["conflict"]
-    if subject and any(kw in subject_lower for kw in conflict_keywords):
+    if "conflict" in _subject_context_categories(subject):
         conflict_geo = location_hint or state_name or subject
         queries.extend(
             [

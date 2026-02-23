@@ -203,5 +203,8 @@ def save_config(config: AppConfig) -> None:
         env_lines.append(f"GOOGLE_CSE_CX={config.google_cse_cx}")
     if not config.enable_ai_suggestions:
         env_lines.append("ENABLE_AI_SUGGESTIONS=false")
+    dot_env = env_path()
     if env_lines:
-        env_path().write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+        dot_env.write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+    elif dot_env.exists():
+        dot_env.unlink()

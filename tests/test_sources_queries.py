@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from utils.sources import (
+    _subject_context_categories,
     build_contextual_google_news_feeds,
     build_emergency_service_queries,
     infer_region_profile,
@@ -53,6 +54,14 @@ class SourceQueryTests(unittest.TestCase):
         )
         self.assertTrue(any("gl=GB" in feed and "ceid=GB:en" in feed for feed in feeds))
 
+    def test_region_inference_plain_us_city_name_defaults_to_us(self) -> None:
+        self.assertEqual(infer_region_profile(location_name="Dallas").key, "us")
+        self.assertEqual(infer_region_profile(location_name="Austin").key, "us")
+
+    def test_region_inference_does_not_route_houston_coords_to_central_america(self) -> None:
+        region = infer_region_profile(latitude=29.7604, longitude=-95.3698)  # Houston
+        self.assertEqual(region.key, "us")
+
     def test_regional_signal_sources_cover_requested_regions(self) -> None:
         europe_urls = {s.url for s in regional_signal_sources(latitude=50.1109, longitude=8.6821)}  # Frankfurt
         canada_urls = {s.url for s in regional_signal_sources(latitude=43.6532, longitude=-79.3832)}  # Toronto
@@ -74,6 +83,10 @@ class SourceQueryTests(unittest.TestCase):
         self.assertIn("https://mausam.imd.gov.in", sa_asia_urls)
         self.assertIn("https://www.bmkg.go.id", sea_urls)
         self.assertIn("https://www.kplc.co.ke", ssa_urls)
+
+    def test_conflict_keyword_detection_avoids_substring_false_positives(self) -> None:
+        self.assertNotIn("conflict", _subject_context_categories("hardware supply chain delays"))
+        self.assertIn("conflict", _subject_context_categories("war escalation and missile strikes"))
 
 
 if __name__ == "__main__":
