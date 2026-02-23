@@ -5,6 +5,9 @@ import unittest
 from utils.sources import (
     build_contextual_google_news_feeds,
     build_emergency_service_queries,
+    infer_region_profile,
+    regional_signal_sources,
+    regional_signal_source_urls,
     build_utility_search_queries,
 )
 
@@ -38,6 +41,39 @@ class SourceQueryTests(unittest.TestCase):
         self.assertIn("news.google.com/rss/search", text)
         self.assertIn("ukraine+conflict+escalation", text)
         self.assertIn("global+conflict+alerts", text)
+
+    def test_region_inference_uses_coordinates_without_location_text(self) -> None:
+        region = infer_region_profile(latitude=48.8566, longitude=2.3522)  # Paris
+        self.assertEqual(region.key, "europe")
+        feeds = build_contextual_google_news_feeds(
+            "flooding and transport disruption",
+            "",
+            latitude=48.8566,
+            longitude=2.3522,
+        )
+        self.assertTrue(any("gl=GB" in feed and "ceid=GB:en" in feed for feed in feeds))
+
+    def test_regional_signal_sources_cover_requested_regions(self) -> None:
+        europe_urls = {s.url for s in regional_signal_sources(latitude=50.1109, longitude=8.6821)}  # Frankfurt
+        canada_urls = {s.url for s in regional_signal_sources(latitude=43.6532, longitude=-79.3832)}  # Toronto
+        australia_urls = {s.url for s in regional_signal_sources(latitude=-33.8688, longitude=151.2093)}  # Sydney
+        sa_urls = {s.url for s in regional_signal_sources(latitude=-26.2041, longitude=28.0473)}  # Johannesburg
+
+        self.assertIn("https://www.meteoalarm.org", europe_urls)
+        self.assertIn("https://weather.gc.ca", canada_urls)
+        self.assertIn("https://www.bom.gov.au", australia_urls)
+        self.assertIn("https://www.eskom.co.za", sa_urls)
+
+    def test_regional_signal_sources_cover_additional_regions_from_coords(self) -> None:
+        me_urls = set(regional_signal_source_urls(latitude=25.2048, longitude=55.2708))  # Dubai
+        sa_asia_urls = set(regional_signal_source_urls(latitude=28.6139, longitude=77.2090))  # Delhi
+        sea_urls = set(regional_signal_source_urls(latitude=13.7563, longitude=100.5018))  # Bangkok
+        ssa_urls = set(regional_signal_source_urls(latitude=6.5244, longitude=3.3792))  # Lagos
+
+        self.assertIn("https://www.aljazeera.com", me_urls)
+        self.assertIn("https://mausam.imd.gov.in", sa_asia_urls)
+        self.assertIn("https://www.bmkg.go.id", sea_urls)
+        self.assertIn("https://www.kplc.co.ke", ssa_urls)
 
 
 if __name__ == "__main__":

@@ -77,6 +77,20 @@ When you provide a ZIP code or coordinates, VigilantCore automatically discovers
 - Earthquake / seismic incident signals
 - Conflict / war / humanitarian crisis updates (subject-driven global monitoring)
 
+### International Region Coverage
+
+When location text or coordinates are provided, VigilantCore can infer a region and prioritize matching sources and localized Google News feeds. Current curated regional URL coverage includes:
+
+- Canada
+- Europe (priority international baseline)
+- North Africa
+- China / Far East
+- Australia
+- South Africa
+- Central America
+- South America
+- Additional fallback regions where sources are available: Middle East, South Asia, Southeast Asia, Sub-Saharan Africa, and global disaster/humanitarian sources
+
 This discovery happens automatically based on your ZIP code - the app maps your ZIP to the correct state and searches for relevant local sources.
 
 ### Local AI Processing

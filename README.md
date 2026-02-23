@@ -49,6 +49,8 @@ cd vigilant-core
   - Transportation/traffic/transit/airport and airline disruption signals
   - Local news and government sources
 - **Context-Aware Extreme Event Coverage**: Flooding, tornadoes, wildfires, winter storms, earthquakes, industrial incidents, and conflict/crisis monitoring queries
+- **International Regional Coverage**: Canada, Europe (priority), North Africa, China/Far East, Australia, South Africa, Central America, South America, plus broader Middle East/South Asia/Southeast Asia/Sub-Saharan Africa/global fallback
+- **Coordinate-First Source Discovery**: Latitude/longitude alone can infer region and automatically seed relevant regional source URLs and localized Google News feeds
 - **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama
@@ -103,6 +105,10 @@ When you provide a ZIP code or coordinates, VigilantCore automatically discovers
 
 **Global Crisis / Conflict (subject-driven):**
 - If your subject mentions war/conflict/crisis terms, VigilantCore expands search/feed queries for international conflict and humanitarian risk updates
+
+**International Regions (location/lat-lon aware):**
+- Regional source URLs and searches are automatically prioritized for Canada, Europe, North Africa, China/Far East, Australia, South Africa, Central America, and South America
+- Additional fallback coverage includes Middle East, South Asia, Southeast Asia, and Sub-Saharan Africa where public sources are available
 
 For example, ZIP code `08544` (Princeton, NJ) automatically adds NWS New Jersey alerts, searches for PSE&G outage info, and finds Mercer County emergency resources.
 

@@ -577,7 +577,12 @@ class MonitorEngine:
                         feed_urls.append(feed)
             location_active = bool(self.config.location_name or self.config.zip_code)
             local_signal_feeds: List[str] = []
-            local_feeds = build_local_feeds(self.config.location_name, self.config.zip_code)
+            local_feeds = build_local_feeds(
+                self.config.location_name,
+                self.config.zip_code,
+                self.config.latitude,
+                self.config.longitude,
+            )
             if local_feeds:
                 for feed in local_feeds:
                     if feed not in feed_urls:

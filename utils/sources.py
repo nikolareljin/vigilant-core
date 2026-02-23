@@ -23,6 +23,18 @@ class SearchResult:
     snippet: str
 
 
+@dataclass(frozen=True)
+class RegionProfile:
+    key: str
+    label: str
+    gl: str
+    ceid: str
+    hl: str
+    utility_terms: tuple[str, ...] = ()
+    transport_terms: tuple[str, ...] = ()
+    emergency_terms: tuple[str, ...] = ()
+
+
 EXTREME_CONTEXT_KEYWORDS: Dict[str, tuple[str, ...]] = {
     "power": ("outage", "power", "electric", "grid", "blackout", "substation"),
     "water": ("water", "main break", "boil advisory", "wastewater", "sewer"),
@@ -36,6 +48,328 @@ EXTREME_CONTEXT_KEYWORDS: Dict[str, tuple[str, ...]] = {
     "winter": ("snow", "ice", "blizzard", "winter storm", "freeze"),
     "earthquake": ("earthquake", "quake", "seismic", "aftershock"),
     "conflict": ("war", "conflict", "missile", "drone strike", "invasion", "border clash"),
+}
+
+
+REGION_PROFILES: Dict[str, RegionProfile] = {
+    "us": RegionProfile(
+        key="us",
+        label="United States",
+        gl="US",
+        ceid="US:en",
+        hl="en-US",
+        utility_terms=("utility outage", "power outage map", "county emergency alerts"),
+        transport_terms=("traffic alerts", "DOT incidents", "FAA ground stop"),
+        emergency_terms=("NWS alerts", "emergency management", "public safety alerts"),
+    ),
+    "canada": RegionProfile(
+        key="canada",
+        label="Canada",
+        gl="CA",
+        ceid="CA:en",
+        hl="en-CA",
+        utility_terms=("hydro outage", "utility outage map", "power restoration"),
+        transport_terms=("511 road conditions", "transit service alerts", "airport delays"),
+        emergency_terms=("public safety alert", "provincial emergency", "weather warnings canada"),
+    ),
+    "europe": RegionProfile(
+        key="europe",
+        label="Europe",
+        gl="GB",
+        ceid="GB:en",
+        hl="en-GB",
+        utility_terms=("grid operator outage", "electricity network outage", "gas network incident"),
+        transport_terms=("motorway closure", "rail disruption", "airport operations alerts"),
+        emergency_terms=("civil protection alerts", "severe weather warning", "flood warning"),
+    ),
+    "north_africa": RegionProfile(
+        key="north_africa",
+        label="North Africa",
+        gl="EG",
+        ceid="EG:en",
+        hl="en",
+        utility_terms=("electricity outage", "water cuts", "gas supply disruption"),
+        transport_terms=("road closure", "airport disruptions", "port operations disruption"),
+        emergency_terms=("civil protection", "flood warning", "wildfire alerts"),
+    ),
+    "china": RegionProfile(
+        key="china",
+        label="China",
+        gl="CN",
+        ceid="CN:en",
+        hl="en",
+        utility_terms=("power grid outage", "water utility disruption", "gas supply incident"),
+        transport_terms=("rail disruption", "metro service alert", "airport delays"),
+        emergency_terms=("typhoon warning", "flood control alert", "emergency response"),
+    ),
+    "far_east": RegionProfile(
+        key="far_east",
+        label="Far East",
+        gl="JP",
+        ceid="JP:en",
+        hl="en",
+        utility_terms=("power outage", "grid disruption", "utility emergency"),
+        transport_terms=("rail service disruption", "airport operations alert", "ferry disruption"),
+        emergency_terms=("earthquake warning", "typhoon warning", "flood alert"),
+    ),
+    "australia": RegionProfile(
+        key="australia",
+        label="Australia",
+        gl="AU",
+        ceid="AU:en",
+        hl="en-AU",
+        utility_terms=("power outage", "network outage", "water outage"),
+        transport_terms=("traffic incidents", "road closures", "airport disruptions"),
+        emergency_terms=("bushfire warning", "SES alerts", "BOM severe weather warning"),
+    ),
+    "south_africa": RegionProfile(
+        key="south_africa",
+        label="South Africa",
+        gl="ZA",
+        ceid="ZA:en",
+        hl="en-ZA",
+        utility_terms=("eskom load shedding", "municipal power outage", "water outage"),
+        transport_terms=("traffic disruptions", "road closures", "airport delays"),
+        emergency_terms=("disaster management", "flood warning", "wildfire alerts"),
+    ),
+    "central_america": RegionProfile(
+        key="central_america",
+        label="Central America",
+        gl="MX",
+        ceid="MX:es-419",
+        hl="es-419",
+        utility_terms=("apagones electricidad", "corte de luz", "corte de agua"),
+        transport_terms=("cierres viales", "alerta de trafico", "aeropuerto retrasos"),
+        emergency_terms=("proteccion civil", "alerta por inundacion", "alerta por huracan"),
+    ),
+    "south_america": RegionProfile(
+        key="south_america",
+        label="South America",
+        gl="BR",
+        ceid="BR:pt-419",
+        hl="pt-BR",
+        utility_terms=("apagao energia", "corte de luz", "abastecimento de agua"),
+        transport_terms=("interdicao rodovia", "transito alertas", "atrasos aeroporto"),
+        emergency_terms=("defesa civil alertas", "enchente alerta", "incendio florestal alerta"),
+    ),
+    "middle_east": RegionProfile(
+        key="middle_east",
+        label="Middle East",
+        gl="AE",
+        ceid="AE:en",
+        hl="en",
+        utility_terms=("power outage", "water outage", "grid disruption"),
+        transport_terms=("airport disruptions", "traffic incidents", "port operations disruption"),
+        emergency_terms=("civil defense alerts", "conflict escalation", "flood warning"),
+    ),
+    "south_asia": RegionProfile(
+        key="south_asia",
+        label="South Asia",
+        gl="IN",
+        ceid="IN:en",
+        hl="en-IN",
+        utility_terms=("power cut", "electricity outage", "water supply disruption"),
+        transport_terms=("rail disruption", "traffic jams alerts", "airport delays"),
+        emergency_terms=("disaster management alert", "flood warning", "cyclone warning"),
+    ),
+    "southeast_asia": RegionProfile(
+        key="southeast_asia",
+        label="Southeast Asia",
+        gl="SG",
+        ceid="SG:en",
+        hl="en",
+        utility_terms=("power outage", "water disruption", "grid failure"),
+        transport_terms=("traffic alert", "rail disruption", "airport delays"),
+        emergency_terms=("flood alert", "typhoon warning", "disaster response"),
+    ),
+    "sub_saharan_africa": RegionProfile(
+        key="sub_saharan_africa",
+        label="Sub-Saharan Africa",
+        gl="KE",
+        ceid="KE:en",
+        hl="en",
+        utility_terms=("power outage", "load shedding", "water supply disruption"),
+        transport_terms=("road closures", "traffic alerts", "airport disruptions"),
+        emergency_terms=("disaster management", "flood alert", "humanitarian crisis"),
+    ),
+    "global": RegionProfile(
+        key="global",
+        label="Global",
+        gl="US",
+        ceid="US:en",
+        hl="en-US",
+        utility_terms=("power outage map", "grid disruption", "utility emergency"),
+        transport_terms=("aviation disruptions", "traffic incidents", "rail disruptions"),
+        emergency_terms=("disaster alerts", "humanitarian crisis", "conflict escalation"),
+    ),
+}
+
+
+REGION_HINTS: Dict[str, tuple[str, ...]] = {
+    "canada": ("canada", "ontario", "quebec", "alberta", "bc", "british columbia", "toronto", "montreal", "vancouver"),
+    "europe": (
+        "europe", "uk", "united kingdom", "england", "scotland", "wales", "ireland",
+        "france", "germany", "spain", "italy", "portugal", "netherlands", "belgium",
+        "sweden", "norway", "denmark", "finland", "poland", "ukraine", "romania",
+        "greece", "serbia", "croatia", "bosnia", "slovenia", "austria", "switzerland",
+        "czech", "slovakia", "hungary", "bulgaria", "albania", "montenegro", "kosovo",
+        "moldova", "estonia", "latvia", "lithuania",
+    ),
+    "north_africa": ("north africa", "morocco", "algeria", "tunisia", "libya", "egypt", "sudan"),
+    "china": ("china", "beijing", "shanghai", "guangzhou", "shenzhen", "hong kong"),
+    "far_east": ("japan", "tokyo", "korea", "seoul", "taiwan", "taipei", "philippines", "manila"),
+    "australia": ("australia", "sydney", "melbourne", "brisbane", "perth", "adelaide", "canberra", "tasmania", "queensland", "nsw"),
+    "south_africa": ("south africa", "johannesburg", "cape town", "durban", "pretoria", "eskom"),
+    "central_america": ("central america", "guatemala", "belize", "honduras", "el salvador", "nicaragua", "costa rica", "panama"),
+    "south_america": (
+        "south america", "brazil", "argentina", "chile", "colombia", "peru", "ecuador",
+        "bolivia", "paraguay", "uruguay", "venezuela", "guyana", "suriname",
+    ),
+    "middle_east": (
+        "middle east", "israel", "palestine", "gaza", "west bank", "lebanon", "jordan",
+        "syria", "iraq", "iran", "saudi", "uae", "dubai", "abu dhabi", "qatar", "oman",
+        "yemen", "kuwait", "bahrain",
+    ),
+    "south_asia": (
+        "india", "pakistan", "bangladesh", "nepal", "sri lanka", "bhutan", "maldives",
+        "new delhi", "mumbai", "karachi", "dhaka", "colombo",
+    ),
+    "southeast_asia": (
+        "indonesia", "jakarta", "malaysia", "kuala lumpur", "singapore", "thailand", "bangkok",
+        "vietnam", "hanoi", "ho chi minh", "philippines", "manila", "cambodia", "laos", "myanmar",
+    ),
+    "sub_saharan_africa": (
+        "kenya", "nairobi", "uganda", "kampala", "tanzania", "dar es salaam", "ethiopia", "addis ababa",
+        "ghana", "accra", "nigeria", "lagos", "abuja", "rwanda", "zambia", "zimbabwe", "botswana", "namibia",
+    ),
+}
+
+
+REGIONAL_SIGNAL_SOURCES: Dict[str, List[Source]] = {
+    "canada": [
+        Source("Environment and Climate Change Canada", "https://weather.gc.ca"),
+        Source("The Weather Network", "https://www.theweathernetwork.com/ca"),
+        Source("CBC News", "https://www.cbc.ca/news"),
+        Source("CP24", "https://www.cp24.com"),
+        Source("Hydro One", "https://www.hydroone.com"),
+        Source("BC Hydro", "https://www.bchydro.com"),
+        Source("Hydro-Québec", "https://www.hydroquebec.com"),
+        Source("PowerStream/Alectra", "https://www.alectrautilities.com"),
+    ],
+    "europe": [
+        Source("Meteoalarm", "https://www.meteoalarm.org"),
+        Source("Copernicus EMS", "https://emergency.copernicus.eu"),
+        Source("European Commission ERCC", "https://civil-protection-humanitarian-aid.ec.europa.eu"),
+        Source("National Grid UK", "https://www.nationalgrid.com"),
+        Source("National Highways UK", "https://nationalhighways.co.uk"),
+        Source("Network Rail", "https://www.networkrail.co.uk"),
+        Source("Eurocontrol", "https://www.eurocontrol.int"),
+    ],
+    "north_africa": [
+        Source("Ahram Online", "https://english.ahram.org.eg"),
+        Source("Morocco World News", "https://www.moroccoworldnews.com"),
+        Source("Tunisie Numerique", "https://www.tunisienumerique.com"),
+        Source("Libya Observer", "https://libyaobserver.ly"),
+        Source("Algerie Presse Service", "https://www.aps.dz/en"),
+        Source("EgyptAir", "https://www.egyptair.com"),
+    ],
+    "china": [
+        Source("National Meteorological Center China", "http://www.nmc.cn/en"),
+        Source("China Daily", "https://www.chinadaily.com.cn"),
+        Source("Xinhua", "https://english.news.cn"),
+        Source("CGTN", "https://www.cgtn.com"),
+        Source("South China Morning Post", "https://www.scmp.com"),
+        Source("State Grid Corporation of China", "https://www.sgcc.com.cn"),
+        Source("China Southern Power Grid", "https://www.csg.cn"),
+    ],
+    "far_east": [
+        Source("Japan Meteorological Agency", "https://www.jma.go.jp/jma/indexe.html"),
+        Source("NHK World", "https://www3.nhk.or.jp/nhkworld/"),
+        Source("Japan Times", "https://www.japantimes.co.jp"),
+        Source("Korea Herald", "https://www.koreaherald.com"),
+        Source("Yonhap", "https://en.yna.co.kr"),
+        Source("CNA Singapore", "https://www.channelnewsasia.com"),
+        Source("Straits Times", "https://www.straitstimes.com"),
+        Source("Taiwan News", "https://www.taiwannews.com.tw"),
+    ],
+    "australia": [
+        Source("Bureau of Meteorology", "https://www.bom.gov.au"),
+        Source("NSW SES", "https://www.ses.nsw.gov.au"),
+        Source("Queensland Traffic", "https://qldtraffic.qld.gov.au"),
+        Source("VicEmergency", "https://www.emergency.vic.gov.au"),
+        Source("ABC News AU", "https://www.abc.net.au/news"),
+        Source("SBS News", "https://www.sbs.com.au/news"),
+        Source("Ausgrid", "https://www.ausgrid.com.au"),
+        Source("SA Power Networks", "https://www.sapowernetworks.com.au"),
+    ],
+    "south_africa": [
+        Source("Eskom", "https://www.eskom.co.za"),
+        Source("South African Weather Service", "https://www.weathersa.co.za"),
+        Source("SANRAL", "https://www.nra.co.za"),
+        Source("News24", "https://www.news24.com"),
+        Source("SABC News", "https://www.sabcnews.com/sabcnews/"),
+        Source("City Power Johannesburg", "https://www.citypower.co.za"),
+    ],
+    "central_america": [
+        Source("CONRED Guatemala", "https://conred.gob.gt"),
+        Source("SINAPROC Panama", "https://www.sinaproc.gob.pa"),
+        Source("Comision Nacional de Emergencias CR", "https://www.cne.go.cr"),
+        Source("La Prensa (Panama)", "https://www.prensa.com"),
+        Source("La Nacion (Costa Rica)", "https://www.nacion.com"),
+        Source("El Heraldo (Honduras)", "https://www.elheraldo.hn"),
+    ],
+    "south_america": [
+        Source("INMET Brazil", "https://portal.inmet.gov.br"),
+        Source("Defesa Civil SP", "https://www.defesacivil.sp.gov.br"),
+        Source("Metsul", "https://metsul.com"),
+        Source("SMN Argentina", "https://www.smn.gob.ar"),
+        Source("ONEMI/SENAPRED Chile", "https://www.senapred.cl"),
+        Source("IDEAM Colombia", "http://www.ideam.gov.co"),
+        Source("SENAMHI Peru", "https://www.senamhi.gob.pe"),
+        Source("El Tiempo", "https://www.eltiempo.com"),
+    ],
+    "middle_east": [
+        Source("Al Jazeera", "https://www.aljazeera.com"),
+        Source("Arab News", "https://www.arabnews.com"),
+        Source("The National", "https://www.thenationalnews.com"),
+        Source("Times of Israel", "https://www.timesofisrael.com"),
+        Source("Jerusalem Post", "https://www.jpost.com"),
+        Source("Middle East Eye", "https://www.middleeasteye.net"),
+        Source("UN OCHA", "https://www.unocha.org"),
+    ],
+    "south_asia": [
+        Source("IMD India", "https://mausam.imd.gov.in"),
+        Source("NDMA India", "https://ndma.gov.in"),
+        Source("The Hindu", "https://www.thehindu.com"),
+        Source("Indian Express", "https://indianexpress.com"),
+        Source("Dawn", "https://www.dawn.com"),
+        Source("BDNews24", "https://bdnews24.com"),
+    ],
+    "southeast_asia": [
+        Source("BMKG Indonesia", "https://www.bmkg.go.id"),
+        Source("Meteo Malaysia", "https://www.met.gov.my"),
+        Source("PAGASA", "https://www.pagasa.dost.gov.ph"),
+        Source("The Straits Times", "https://www.straitstimes.com"),
+        Source("Bangkok Post", "https://www.bangkokpost.com"),
+        Source("VNExpress", "https://e.vnexpress.net"),
+    ],
+    "sub_saharan_africa": [
+        Source("Kenya Power", "https://www.kplc.co.ke"),
+        Source("KMD Kenya", "https://www.meteo.go.ke"),
+        Source("NEMA Nigeria", "https://nema.gov.ng"),
+        Source("MyJoyOnline", "https://www.myjoyonline.com"),
+        Source("Daily Nation", "https://nation.africa"),
+        Source("The East African", "https://www.theeastafrican.co.ke"),
+    ],
+    "global": [
+        Source("ReliefWeb", "https://reliefweb.int"),
+        Source("GDACS", "https://www.gdacs.org"),
+        Source("UN OCHA", "https://www.unocha.org"),
+        Source("WHO Emergencies", "https://www.who.int/emergencies"),
+        Source("IFRC", "https://www.ifrc.org"),
+        Source("EASA", "https://www.easa.europa.eu"),
+        Source("ICAO", "https://www.icao.int"),
+    ],
 }
 
 
@@ -563,6 +897,98 @@ def _normalized_words(text: str) -> set[str]:
     return {w for w in cleaned.split() if w}
 
 
+def _infer_region_from_coords(
+    latitude: Optional[float],
+    longitude: Optional[float],
+) -> Optional[RegionProfile]:
+    if latitude is None or longitude is None:
+        return None
+    lat = float(latitude)
+    lon = float(longitude)
+
+    # Rough geographic boxes for source-language/region selection.
+    if 24 <= lat <= 84 and -170 <= lon <= -52:
+        if lat >= 41 and -141 <= lon <= -52:
+            return REGION_PROFILES["canada"]
+        if 7 <= lat <= 33 and -118 <= lon <= -77:
+            return REGION_PROFILES["central_america"]
+        return REGION_PROFILES["us"]
+
+    if 34 <= lat <= 72 and -25 <= lon <= 45:
+        return REGION_PROFILES["europe"]
+
+    if 15 <= lat <= 38 and -18 <= lon <= 40:
+        return REGION_PROFILES["north_africa"]
+
+    if 12 <= lat <= 42 and 34 <= lon <= 64:
+        return REGION_PROFILES["middle_east"]
+
+    if -35 <= lat <= -20 and 16 <= lon <= 33:
+        return REGION_PROFILES["south_africa"]
+
+    if -35 <= lat <= 20 and -20 <= lon <= 52:
+        return REGION_PROFILES["sub_saharan_africa"]
+
+    if -56 <= lat <= 13 and -82 <= lon <= -34:
+        return REGION_PROFILES["south_america"]
+
+    if -45 <= lat <= -9 and 110 <= lon <= 180:
+        return REGION_PROFILES["australia"]
+
+    if 5 <= lat <= 36 and 60 <= lon <= 98:
+        return REGION_PROFILES["south_asia"]
+
+    if -12 <= lat <= 24 and 95 <= lon <= 141:
+        return REGION_PROFILES["southeast_asia"]
+
+    if 18 <= lat <= 54 and 73 <= lon <= 135:
+        return REGION_PROFILES["china"]
+
+    if 0 <= lat <= 55 and 120 <= lon <= 155:
+        return REGION_PROFILES["far_east"]
+
+    return REGION_PROFILES["global"]
+
+
+def infer_region_profile(
+    location_name: str = "",
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> RegionProfile:
+    """Infer a monitoring region/country profile from location text and ZIP code."""
+    if zip_code and get_state_from_zip(zip_code):
+        return REGION_PROFILES["us"]
+
+    coord_region = _infer_region_from_coords(latitude, longitude)
+    if coord_region is not None:
+        return coord_region
+
+    haystack = (location_name or "").lower()
+    for key in (
+        "canada",
+        "europe",
+        "north_africa",
+        "middle_east",
+        "china",
+        "far_east",
+        "south_asia",
+        "southeast_asia",
+        "australia",
+        "south_africa",
+        "sub_saharan_africa",
+        "central_america",
+        "south_america",
+    ):
+        if any(hint in haystack for hint in REGION_HINTS.get(key, ())):
+            return REGION_PROFILES[key]
+
+    # Default to US behavior if no location is provided; otherwise Europe-first for international text.
+    if not haystack.strip():
+        return REGION_PROFILES["us"]
+    return REGION_PROFILES["europe"]
+
+
 def _subject_context_categories(subject: str) -> set[str]:
     if not subject:
         return set()
@@ -574,8 +1000,56 @@ def _subject_context_categories(subject: str) -> set[str]:
     return categories
 
 
-def _google_news_rss(query: str) -> str:
-    return f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
+def _google_news_rss(
+    query: str,
+    gl: str = "US",
+    ceid: str = "US:en",
+    hl: str = "en-US",
+) -> str:
+    return f"https://news.google.com/rss/search?q={quote_plus(query)}&hl={hl}&gl={gl}&ceid={ceid}"
+
+
+def regional_signal_sources(
+    location_name: str = "",
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> List[Source]:
+    """Return curated source URLs prioritized for the inferred region."""
+    region = infer_region_profile(location_name, zip_code, latitude, longitude)
+    ordered: List[Source] = []
+    seen: set[str] = set()
+
+    # Europe should remain a top international baseline for non-US monitoring.
+    preferred_keys = [region.key]
+    if region.key != "europe":
+        preferred_keys.append("europe")
+    if region.key not in ("us", "canada"):
+        preferred_keys.append("canada")
+
+    for key in preferred_keys:
+        for src in REGIONAL_SIGNAL_SOURCES.get(key, []):
+            if src.url in seen:
+                continue
+            seen.add(src.url)
+            ordered.append(src)
+
+    for src in REGIONAL_SIGNAL_SOURCES.get("global", []):
+        if src.url in seen:
+            continue
+        seen.add(src.url)
+        ordered.append(src)
+    return ordered
+
+
+def regional_signal_source_urls(
+    location_name: str = "",
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> List[str]:
+    """Return curated source URLs for the inferred region (convenience helper)."""
+    return [s.url for s in regional_signal_sources(location_name, zip_code, latitude, longitude)]
 
 
 def build_contextual_google_news_feeds(
@@ -583,10 +1057,15 @@ def build_contextual_google_news_feeds(
     location_name: str,
     zip_code: Optional[str] = None,
     state_abbrev: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> List[str]:
     """Build on-demand Google News RSS feeds for likely emergency/infrastructure contexts."""
     feeds: List[str] = []
+    region = infer_region_profile(location_name, zip_code, latitude, longitude)
     location_hint = " ".join(part for part in [location_name, zip_code] if part).strip()
+    if not location_hint and latitude is not None and longitude is not None:
+        location_hint = f"{latitude:.3f},{longitude:.3f}"
     state_name = get_state_name(state_abbrev) if state_abbrev else None
     categories = _subject_context_categories(subject)
     if not categories and location_hint:
@@ -677,6 +1156,12 @@ def build_contextual_google_news_feeds(
                     f"{location_hint} seismic activity",
                 ]
             )
+        for term in region.utility_terms:
+            queries.append(f"{location_hint} {term}")
+        for term in region.transport_terms:
+            queries.append(f"{location_hint} {term}")
+        for term in region.emergency_terms:
+            queries.append(f"{location_hint} {term}")
 
     # Global crisis/conflict monitoring (can be subject-driven even without ZIP)
     if "conflict" in categories:
@@ -697,8 +1182,11 @@ def build_contextual_google_news_feeds(
         if base_query:
             queries.append(base_query)
 
+    if location_hint and not subject:
+        queries.extend([f"{location_hint} {term}" for term in region.emergency_terms[:2]])
+
     for q in dict.fromkeys(q for q in queries if q):
-        feeds.append(_google_news_rss(q))
+        feeds.append(_google_news_rss(q, gl=region.gl, ceid=region.ceid, hl=region.hl))
     return feeds
 
 
@@ -976,15 +1464,22 @@ def ensure_seed_feeds(existing: List[str]) -> List[str]:
     ]
 
 
-def build_local_feeds(location_name: str, zip_code: Optional[str] = None) -> List[str]:
+def build_local_feeds(
+    location_name: str,
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> List[str]:
     queries = []
     if location_name:
         queries.append(location_name)
     if zip_code:
         queries.append(zip_code)
+    if not queries and latitude is not None and longitude is not None:
+        queries.append(f"{latitude:.3f},{longitude:.3f}")
     if not queries:
         return []
-    base = "https://news.google.com/rss/search"
+    region = infer_region_profile(location_name, zip_code, latitude, longitude)
     location_str = " ".join(queries)
     feed_queries = [
         f"{location_str} police",
@@ -1003,7 +1498,7 @@ def build_local_feeds(location_name: str, zip_code: Optional[str] = None) -> Lis
     ]
     feeds = []
     for q in feed_queries:
-        feeds.append(f"{base}?q={quote_plus(q)}&hl=en-US&gl=US&ceid=US:en")
+        feeds.append(_google_news_rss(q, gl=region.gl, ceid=region.ceid, hl=region.hl))
     return feeds
 
 
@@ -1238,7 +1733,14 @@ def discover_emergency_feeds(
             feeds.append(feed)
 
     # Add contextual Google News feeds for outages/disasters/transport/aviation/conflict
-    for feed in build_contextual_google_news_feeds(subject, location_name, zip_code, state_abbrev):
+    for feed in build_contextual_google_news_feeds(
+        subject,
+        location_name,
+        zip_code,
+        state_abbrev,
+        latitude=latitude,
+        longitude=longitude,
+    ):
         if feed not in feeds:
             feeds.append(feed)
         if len(feeds) >= max_feeds:
@@ -1290,6 +1792,21 @@ def discover_emergency_feeds(
     )
 
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
+        # Try curated regional source URLs first (seamless path for lat/lon-only configurations)
+        for source in regional_signal_sources(location_name, zip_code, latitude, longitude):
+            if len(feeds) >= max_feeds:
+                break
+            for base_url in (source.url, _root_url(source.url)):
+                for feed in discover_feed_links(base_url, client):
+                    if feed in feeds:
+                        continue
+                    if _validate_feed(feed, client):
+                        feeds.append(feed)
+                        if len(feeds) >= max_feeds:
+                            break
+                if len(feeds) >= max_feeds:
+                    break
+
         for query in all_queries:
             if len(feeds) >= max_feeds:
                 break
@@ -1355,11 +1872,18 @@ def build_comprehensive_local_feeds(
         add_feed(feed)
 
     # 2. Google News feeds for local topics
-    for feed in build_local_feeds(location_name, zip_code):
+    for feed in build_local_feeds(location_name, zip_code, latitude, longitude):
         add_feed(feed)
 
     # 2b. Subject-driven Google News topic feeds for outages, disasters, transport, conflict, etc.
-    for feed in build_contextual_google_news_feeds(subject, location_name, zip_code, state_abbrev):
+    for feed in build_contextual_google_news_feeds(
+        subject,
+        location_name,
+        zip_code,
+        state_abbrev,
+        latitude=latitude,
+        longitude=longitude,
+    ):
         add_feed(feed)
 
     # 3. Subject + location Google News feed
