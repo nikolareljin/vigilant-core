@@ -241,6 +241,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle("VigilantCore Setup")
         self.setMinimumWidth(520)
+        self.display_timezone_value: str | None = None
 
         self.subject_input = QtWidgets.QLineEdit()
         self.question_input = QtWidgets.QLineEdit()
@@ -361,6 +362,7 @@ class FirstRunDialog(QtWidgets.QDialog):
             enable_duckduckgo_search=self.duckduckgo_checkbox.isChecked(),
             polling_minutes=int(self.polling_input.text().strip() or "5"),
             insight_refresh_minutes=int(self.insight_refresh_combo.currentText() or "5"),
+            display_timezone=self.display_timezone_value,
         )
 
 
@@ -467,7 +469,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for row in database.fetch_recent(200):
             self.add_row(
                 {
-                    "created_at": format_alert_timestamp(row["created_at"], self.config.display_timezone),
+                    "created_at": row["created_at"],
                     "impact_score": row["impact_score"],
                     "title": row["title"],
                     "source": row["source"],
@@ -479,7 +481,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def add_row(self, alert: Dict) -> None:
         row = self.table.rowCount()
         self.table.insertRow(row)
-        created = alert.get("created_at") or ""
+        created = format_alert_timestamp(alert.get("created_at"), self.config.display_timezone)
         score = str(alert.get("impact_score", ""))
         title = alert.get("title", "")
         source = alert.get("source", "")
@@ -536,6 +538,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def edit_config(self) -> None:
         dialog = FirstRunDialog(self)
+        dialog.display_timezone_value = self.config.display_timezone
         dialog.subject_input.setText(self.config.subject)
         dialog.question_input.setText(self.config.question)
         dialog.light_model_checkbox.setChecked(self.config.prefer_light_model)
@@ -576,11 +579,13 @@ class MainWindow(QtWidgets.QMainWindow):
 def ensure_config() -> AppConfig:
     if not config_path().exists():
         dialog = FirstRunDialog()
+        current_cfg = load_config()
+        dialog.display_timezone_value = current_cfg.display_timezone
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             config = dialog.to_config()
             save_config(config)
             return config
-        return AppConfig()
+        return current_cfg
     return load_config()
 
 
