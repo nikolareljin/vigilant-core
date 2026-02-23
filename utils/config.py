@@ -11,9 +11,10 @@ from typing import List, Optional
 
 from dotenv import load_dotenv
 try:
-    from zoneinfo import ZoneInfo
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 except ImportError:  # pragma: no cover - Python <3.9 fallback
     ZoneInfo = None  # type: ignore[assignment]
+    ZoneInfoNotFoundError = ValueError  # type: ignore[assignment]
 
 APP_NAME = "VigilantCore"
 
@@ -27,7 +28,7 @@ def _load_display_timezone_from_env() -> Optional[str]:
         return tz_name
     try:
         ZoneInfo(tz_name)
-    except Exception:
+    except (ZoneInfoNotFoundError, ValueError):
         print(
             f"Warning: Invalid timezone '{tz_name}' in DISPLAY_TIMEZONE/TIMEZONE; falling back to host local time.",
             file=sys.stderr,
