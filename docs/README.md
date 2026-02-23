@@ -9,6 +9,7 @@ Welcome to the VigilantCore documentation.
 | [Installation Guide](installation.md) | How to install and run VigilantCore |
 | [Configuration Guide](configuration.md) | All configuration options explained |
 | [Features](features.md) | Complete feature documentation |
+| [Source Discovery & Regional Coverage](source-discovery.md) | How outage/emergency/cross-region source selection works |
 | [Examples](examples.md) | Real-world usage examples |
 
 ## Quick Links

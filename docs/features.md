@@ -91,6 +91,15 @@ When location text or coordinates are provided, VigilantCore can infer a region 
 - South America
 - Additional fallback regions where sources are available: Middle East, South Asia, Southeast Asia, Sub-Saharan Africa, and global disaster/humanitarian sources
 
+### Source Preview (Web Setup)
+
+The setup page includes a regional source preview panel that:
+- Infers the region from location text / ZIP / latitude-longitude
+- Shows curated source URLs that will be prioritized for discovery
+- Works before saving settings
+
+You can also query the same data programmatically via `GET /api/source-preview`.
+
 This discovery happens automatically based on your ZIP code - the app maps your ZIP to the correct state and searches for relevant local sources.
 
 ### Local AI Processing

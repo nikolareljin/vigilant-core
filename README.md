@@ -110,6 +110,54 @@ When you provide a ZIP code or coordinates, VigilantCore automatically discovers
 - Regional source URLs and searches are automatically prioritized for Canada, Europe, North Africa, China/Far East, Australia, South Africa, Central America, and South America
 - Additional fallback coverage includes Middle East, South Asia, Southeast Asia, and Sub-Saharan Africa where public sources are available
 
+## Regional Source Discovery (Detailed)
+
+VigilantCore now uses a layered source-discovery approach for outage/extreme-event monitoring:
+
+1. **Infer region** from ZIP code, location text, or latitude/longitude (lat/lon works by itself).
+2. **Select curated regional URLs** (utilities, emergency agencies, weather services, transport/aviation operations, and major regional news).
+3. **Generate localized Google News RSS feeds** using region-specific locale settings (`gl`, `hl`, `ceid`).
+4. **Expand context-aware searches** for utilities, transportation, disasters, and conflict/humanitarian crises.
+5. **Discover RSS feeds** from candidate sites and merge with user-provided feeds and other search/API sources.
+
+This improves coverage in places where direct RSS feeds are inconsistent or unavailable.
+
+### Coordinate-First Behavior
+
+If you provide only coordinates:
+
+- `latitude`
+- `longitude`
+
+VigilantCore can still:
+
+- infer an approximate region
+- select localized regional source URLs
+- generate localized Google News feeds
+- preview the selected region/sources before saving
+
+### Source Preview (Web Setup + API)
+
+The setup page includes a **Regional Source Preview** panel that shows:
+
+- inferred region key/label
+- curated source URL count
+- curated source URLs that will be prioritized
+
+Programmatic preview:
+
+```bash
+curl "http://127.0.0.1:8765/api/source-preview?latitude=48.8566&longitude=2.3522"
+```
+
+Another example:
+
+```bash
+curl "http://127.0.0.1:8765/api/source-preview?location_name=Toronto,%20Ontario,%20Canada"
+```
+
+See `docs/source-discovery.md` for the full coverage list and implementation behavior.
+
 For example, ZIP code `08544` (Princeton, NJ) automatically adds NWS New Jersey alerts, searches for PSE&G outage info, and finds Mercer County emergency resources.
 
 ## Requirements

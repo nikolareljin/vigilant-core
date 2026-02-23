@@ -19,7 +19,11 @@ from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
 from utils.geo import detect_geo  # noqa: E402
-from utils.sources import ensure_seed_feeds  # noqa: E402
+from utils.sources import (  # noqa: E402
+    ensure_seed_feeds,
+    infer_region_profile,
+    regional_signal_source_urls,
+)
 from utils.timefmt import format_alert_timestamp  # noqa: E402
 
 
@@ -331,6 +335,12 @@ SETUP_TEMPLATE = """
     .row { display: flex; gap: 12px; }
     .row > div { flex: 1; }
     .row label { margin-top: 0; }
+    .preview-card { margin-top: 14px; background: #f6f8ff; border: 1px solid #dfe5ff; border-radius: 8px; padding: 12px; }
+    .preview-title { font-weight: 700; color: #22306a; margin-bottom: 6px; }
+    .preview-meta { font-size: 0.9em; color: #4b5563; margin-bottom: 8px; }
+    .preview-list { margin: 0; padding-left: 18px; max-height: 180px; overflow: auto; }
+    .preview-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+    .preview-btn { margin-top: 0; background: #5f6b7a; }
   </style>
 </head>
 <body>
@@ -376,6 +386,18 @@ SETUP_TEMPLATE = """
         <div>
           <label>Longitude</label>
           <input name="longitude" value="{{ config.longitude or '' }}" placeholder="Optional" />
+        </div>
+      </div>
+
+      <div class="preview-card">
+        <div class="preview-title">Regional Source Preview</div>
+        <div class="preview-meta" id="sourcePreviewMeta">Preview inferred region and curated source URLs for the current location / coordinates.</div>
+        <ul class="preview-list" id="sourcePreviewList">
+          <li>Loading preview…</li>
+        </ul>
+        <div class="preview-actions">
+          <button type="button" class="preview-btn" id="refreshSourcePreviewBtn">Refresh Preview</button>
+          <span class="help">Uses location name, ZIP, and latitude/longitude (lat/lon works even without location text).</span>
         </div>
       </div>
 
@@ -501,6 +523,56 @@ SETUP_TEMPLATE = """
 
     <button type="submit">Save & Start Monitoring</button>
   </form>
+  <script>
+    function sourcePreviewParams() {
+      const form = document.querySelector('form');
+      const get = (name) => (form.querySelector(`[name="${name}"]`)?.value || '').trim();
+      const params = new URLSearchParams();
+      const subject = get('subject');
+      const locationName = get('location_name');
+      const zipCode = get('zip_code');
+      const latitude = get('latitude');
+      const longitude = get('longitude');
+      if (subject) params.set('subject', subject);
+      if (locationName) params.set('location_name', locationName);
+      if (zipCode) params.set('zip_code', zipCode);
+      if (latitude) params.set('latitude', latitude);
+      if (longitude) params.set('longitude', longitude);
+      return params;
+    }
+
+    async function loadSourcePreview() {
+      const meta = document.getElementById('sourcePreviewMeta');
+      const list = document.getElementById('sourcePreviewList');
+      meta.textContent = 'Loading preview...';
+      list.innerHTML = '<li>Loading preview…</li>';
+      try {
+        const params = sourcePreviewParams();
+        const res = await fetch('/api/source-preview?' + params.toString());
+        const data = await res.json();
+        meta.textContent = `Inferred region: ${data.region_label} (${data.region_key}) | ${data.source_count} curated URLs`;
+        if (!data.urls || data.urls.length === 0) {
+          list.innerHTML = '<li>No curated regional URLs available for this location yet.</li>';
+          return;
+        }
+        list.innerHTML = data.urls.slice(0, 25).map((url) => `<li><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></li>`).join('');
+      } catch (err) {
+        meta.textContent = 'Failed to load preview.';
+        list.innerHTML = '<li>Could not fetch source preview.</li>';
+      }
+    }
+
+    const previewFields = ['subject', 'location_name', 'zip_code', 'latitude', 'longitude'];
+    for (const name of previewFields) {
+      const el = document.querySelector(`[name="${name}"]`);
+      if (el) {
+        el.addEventListener('change', loadSourcePreview);
+        el.addEventListener('blur', loadSourcePreview);
+      }
+    }
+    document.getElementById('refreshSourcePreviewBtn').addEventListener('click', loadSourcePreview);
+    loadSourcePreview();
+  </script>
 </body>
 </html>
 """
@@ -546,6 +618,47 @@ def get_config() -> AppConfig:
         config.latitude = geo.latitude
         config.longitude = geo.longitude
     return config
+
+
+def _source_preview_payload(config: AppConfig) -> dict:
+    region = infer_region_profile(
+        location_name=config.location_name or "",
+        zip_code=config.zip_code,
+        latitude=config.latitude,
+        longitude=config.longitude,
+    )
+    urls = regional_signal_source_urls(
+        location_name=config.location_name or "",
+        zip_code=config.zip_code,
+        latitude=config.latitude,
+        longitude=config.longitude,
+    )
+    return {
+        "region_key": region.key,
+        "region_label": region.label,
+        "location_name": config.location_name or "",
+        "zip_code": config.zip_code,
+        "latitude": config.latitude,
+        "longitude": config.longitude,
+        "source_count": len(urls),
+        "urls": urls,
+    }
+
+
+def _normalize_suggestions(value) -> list[str]:
+    if isinstance(value, list):
+        cleaned = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                cleaned.append(text)
+        return cleaned[:5]
+    if isinstance(value, str):
+        lines = [line.strip("-• \t") for line in value.splitlines()]
+        cleaned = [line for line in lines if line]
+        if cleaned:
+            return cleaned[:5]
+    return []
 
 
 @app.route("/favicon.ico")
@@ -788,6 +901,26 @@ def api_alerts() -> str:
             }
         )
     return jsonify({"alerts": alerts, "page": page, "limit": limit})
+
+
+@app.route("/api/source-preview")
+def api_source_preview() -> str:
+    config = get_config()
+    config.subject = request.args.get("subject", config.subject or "Impactful Events").strip() or "Impactful Events"
+    config.location_name = request.args.get("location_name", config.location_name or "").strip()
+    zip_code = (request.args.get("zip_code") or "").strip()
+    config.zip_code = zip_code or None
+    lat_raw = (request.args.get("latitude") or "").strip()
+    lon_raw = (request.args.get("longitude") or "").strip()
+    try:
+        config.latitude = float(lat_raw) if lat_raw else None
+    except ValueError:
+        config.latitude = None
+    try:
+        config.longitude = float(lon_raw) if lon_raw else None
+    except ValueError:
+        config.longitude = None
+    return jsonify(_source_preview_payload(config))
 
 
 @app.route("/data")
