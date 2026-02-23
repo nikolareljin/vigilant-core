@@ -4,6 +4,17 @@ All notable changes to VigilantCore will be documented in this file.
 
 ## [0.2.2] - Unreleased
 
+### Added
+
+- **Cross-platform compatibility test coverage**: Added `tests/test_platform_compat.py` to validate Windows/macOS/Linux-sensitive launcher and config path behavior (venv path resolution, background process launch flags, and platform config/data directories).
+- **Dedicated compatibility GitHub Actions workflow**: Added `.github/workflows/compatibility.yml` with a Windows/macOS/Linux matrix to run install, compatibility tests, launcher status smoke checks, and Python syntax compilation.
+- **README CI badges**: Added badges for the main CI workflow and the dedicated compatibility workflow, plus platform compatibility indicator badges (Linux/macOS/Windows).
+
+### Changed
+
+- **Test script coverage**: `scripts/test.sh` now runs the platform compatibility unit tests in addition to the existing smoke import check.
+- **Dependencies**: Removed unused `crawl4ai` from `requirements.txt` to reduce install friction and improve cross-platform reliability.
+
 ### Fixed
 
 - **Release auto-tagging CI**: Added the `ci-helpers` `auto-tag-release-push` workflow so merges of `release/*` branches into `main`/`master` automatically create and push the matching release tag.

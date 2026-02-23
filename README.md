@@ -1,5 +1,11 @@
 # VigilantCore
 
+[![CI](https://github.com/nikolareljin/vigilant-core/actions/workflows/ci.yml/badge.svg)](https://github.com/nikolareljin/vigilant-core/actions/workflows/ci.yml)
+[![Compatibility](https://github.com/nikolareljin/vigilant-core/actions/workflows/compatibility.yml/badge.svg)](https://github.com/nikolareljin/vigilant-core/actions/workflows/compatibility.yml)
+![Linux](https://img.shields.io/badge/compatibility-Linux-blue)
+![macOS](https://img.shields.io/badge/compatibility-macOS-black)
+![Windows](https://img.shields.io/badge/compatibility-Windows-0078D6)
+
 <img src="./vigilant_core.png" />
 
 VigilantCore is a local, cross-platform monitoring app that tracks **Impactful Events** for a specific subject, using a local LLM (Ollama) to score impact and generate predictive outcomes. It is designed to be simple for non-technical users while still offering an AI-driven, location-aware signal.
