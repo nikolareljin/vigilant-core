@@ -1,0 +1,54 @@
+name: compatibility
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [ main, master ]
+
+jobs:
+  matrix:
+    name: compatibility (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Lint (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python -m pip install ruff
+          ruff check .
+
+      - name: Platform compatibility tests
+        run: python -m unittest discover -s tests -p "test_platform_compat.py" -v
+
+      - name: Launcher status smoke test
+        run: python vigilant.py status
+
+      - name: Syntax compile smoke test
+        run: >
+          python -m py_compile
+          vigilant.py
+          utils/config.py
+          utils/database.py
+          utils/geo.py
+          utils/sources.py
+          utils/timefmt.py
+          engine/monitor.py
+          engine/parser.py
+          src/main.py
+          src/web_app.py
