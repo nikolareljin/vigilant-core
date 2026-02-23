@@ -51,6 +51,8 @@ cd vigilant-core
 - **Context-Aware Extreme Event Coverage**: Flooding, tornadoes, wildfires, winter storms, earthquakes, industrial incidents, and conflict/crisis monitoring queries
 - **International Regional Coverage**: Canada, Europe (priority), North Africa, China/Far East, Australia, South Africa, Central America, South America, plus broader Middle East/South Asia/Southeast Asia/Sub-Saharan Africa/global fallback
 - **Coordinate-First Source Discovery**: Latitude/longitude alone can infer region and automatically seed relevant regional source URLs and localized Google News feeds
+- **Source Preview UI/API**: Setup page preview and `/api/source-preview` endpoint show the inferred region and curated source URLs before saving
+- **AI Suggested Actions Toggle**: Enable/disable actionable suggestions shown next to the AI insight result from settings
 - **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama

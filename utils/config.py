@@ -64,6 +64,7 @@ class AppConfig:
     bing_search_market: Optional[str] = None
     bing_search_safe: Optional[str] = None
     enable_duckduckgo_search: bool = True
+    enable_ai_suggestions: bool = True
 
 
 def config_dir() -> Path:
@@ -110,6 +111,9 @@ def load_config() -> AppConfig:
         cfg.enable_duckduckgo_search = bool(
             (os.getenv("ENABLE_DUCKDUCKGO_SEARCH") or "true").lower() in ("1", "true", "yes")
         )
+        cfg.enable_ai_suggestions = bool(
+            (os.getenv("ENABLE_AI_SUGGESTIONS") or "true").lower() in ("1", "true", "yes")
+        )
         return cfg
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
     load_dotenv(env_path())
@@ -139,6 +143,7 @@ def load_config() -> AppConfig:
         bing_search_market=data.get("bing_search_market"),
         bing_search_safe=data.get("bing_search_safe"),
         enable_duckduckgo_search=bool(data.get("enable_duckduckgo_search", True)),
+        enable_ai_suggestions=bool(data.get("enable_ai_suggestions", True)),
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
     cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
@@ -151,6 +156,10 @@ def load_config() -> AppConfig:
     if os.getenv("ENABLE_DUCKDUCKGO_SEARCH") is not None:
         cfg.enable_duckduckgo_search = (
             os.getenv("ENABLE_DUCKDUCKGO_SEARCH", "").lower() in ("1", "true", "yes")
+        )
+    if os.getenv("ENABLE_AI_SUGGESTIONS") is not None:
+        cfg.enable_ai_suggestions = (
+            os.getenv("ENABLE_AI_SUGGESTIONS", "").lower() in ("1", "true", "yes")
         )
     return cfg
 
@@ -180,6 +189,7 @@ def save_config(config: AppConfig) -> None:
         "google_cse_api_key": None,
         "google_cse_cx": None,
         "enable_duckduckgo_search": config.enable_duckduckgo_search,
+        "enable_ai_suggestions": config.enable_ai_suggestions,
     }
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
     env_lines = []
@@ -191,5 +201,7 @@ def save_config(config: AppConfig) -> None:
         env_lines.append(f"GOOGLE_CSE_API_KEY={config.google_cse_api_key}")
     if config.google_cse_cx:
         env_lines.append(f"GOOGLE_CSE_CX={config.google_cse_cx}")
+    if not config.enable_ai_suggestions:
+        env_lines.append("ENABLE_AI_SUGGESTIONS=false")
     if env_lines:
         env_path().write_text("\n".join(env_lines) + "\n", encoding="utf-8")

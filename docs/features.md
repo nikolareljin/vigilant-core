@@ -27,6 +27,7 @@ The Monitoring Question feature provides AI-generated summaries based on your sp
 **Insight Display:**
 - **Summary**: A brief answer to your monitoring question
 - **Explanation**: Detailed analysis with supporting evidence from recent alerts
+- **Suggested actions**: Optional, visible recommendations for what to do/how to react in the current context (can be toggled in settings)
 
 ### Location-Aware Filtering
 

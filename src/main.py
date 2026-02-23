@@ -19,6 +19,22 @@ from utils.config import AppConfig, config_path, load_config, save_config  # noq
 from utils.timefmt import format_alert_timestamp  # noqa: E402
 
 
+def _normalize_suggestions(value) -> list[str]:
+    if isinstance(value, list):
+        cleaned = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                cleaned.append(text)
+        return cleaned[:5]
+    if isinstance(value, str):
+        lines = [line.strip("-• \t") for line in value.splitlines()]
+        cleaned = [line for line in lines if line]
+        if cleaned:
+            return cleaned[:5]
+    return []
+
+
 def generate_insight(config: AppConfig) -> Optional[Dict]:
     """Generate AI insight based on monitoring question and recent alerts."""
     if not config.question or not config.question.strip():
@@ -30,6 +46,7 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             "question": config.question,
             "summary": "No relevant data available.",
             "explanation": "No alerts have been collected yet.",
+            "suggestions": [],
             "sources_used": [],
         }
 
@@ -78,14 +95,22 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             f"If asked about probability or likelihood, provide a percentage estimate with brief reasoning."
         )
 
-        user_prompt = (
-            f"MONITORING QUESTION: {config.question}\n\n"
-            f"RECENT ALERTS AND NEWS:\n{context}\n\n"
-            f"Provide your response as JSON with these keys:\n"
-            f'- "summary": A 1-2 sentence direct answer (include probability % if asked about likelihood)\n'
-            f'- "explanation": A 2-4 sentence detailed explanation of how you reached this conclusion\n'
-            f"Respond with ONLY valid JSON, no other text."
-        )
+        prompt_lines = [
+            f"MONITORING QUESTION: {config.question}",
+            "",
+            "RECENT ALERTS AND NEWS:",
+            context,
+            "",
+            "Provide your response as JSON with these keys:",
+            '- "summary": A 1-2 sentence direct answer (include probability % if asked about likelihood)',
+            '- "explanation": A 2-4 sentence detailed explanation of how you reached this conclusion',
+        ]
+        if config.enable_ai_suggestions:
+            prompt_lines.append(
+                '- "suggestions": 2-5 short actionable suggestions for what the user should do next or how to react (specific to this situation and location; safety-first)'
+            )
+        prompt_lines.append("Respond with ONLY valid JSON, no other text.")
+        user_prompt = "\n".join(prompt_lines)
 
         response = client.chat(
             model=model,
@@ -110,6 +135,7 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             "question": config.question,
             "summary": payload.get("summary", "Unable to generate summary."),
             "explanation": payload.get("explanation", ""),
+            "suggestions": _normalize_suggestions(payload.get("suggestions")) if config.enable_ai_suggestions else [],
             "sources_used": list(sources_used)[:10],
         }
 
@@ -185,6 +211,15 @@ class InsightWidget(QtWidgets.QFrame):
         self.explanation_label.setWordWrap(True)
         self.explanation_label.setVisible(False)
 
+        # Suggestions (visible next to/with the result)
+        self.suggestions_label = QtWidgets.QLabel()
+        self.suggestions_label.setStyleSheet(
+            "font-size: 12px; margin-top: 8px; padding: 8px; "
+            "background: rgba(255,255,255,0.12); border-radius: 6px;"
+        )
+        self.suggestions_label.setWordWrap(True)
+        self.suggestions_label.setVisible(False)
+
         # Sources
         self.sources_label = QtWidgets.QLabel()
         self.sources_label.setStyleSheet("font-size: 10px; opacity: 0.8; margin-top: 8px;")
@@ -199,6 +234,7 @@ class InsightWidget(QtWidgets.QFrame):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.addWidget(self.question_label)
         layout.addWidget(self.summary_label)
+        layout.addWidget(self.suggestions_label)
         layout.addWidget(self.expand_indicator)
         layout.addWidget(self.explanation_label)
         layout.addWidget(self.sources_label)
@@ -223,6 +259,15 @@ class InsightWidget(QtWidgets.QFrame):
         self.question_label.setText(f"📋 {data.get('question', '')}")
         self.summary_label.setText(summary)
         self.explanation_label.setText(data.get("explanation", ""))
+        suggestions = _normalize_suggestions(data.get("suggestions"))
+        if suggestions:
+            self.suggestions_label.setText(
+                "Suggested actions:\n" + "\n".join(f"- {item}" for item in suggestions)
+            )
+            self.suggestions_label.setVisible(True)
+        else:
+            self.suggestions_label.setText("")
+            self.suggestions_label.setVisible(False)
 
         sources = data.get("sources_used", [])
         if sources:
@@ -266,6 +311,8 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.news_sort_combo = QtWidgets.QComboBox()
         self.news_sort_combo.addItems(["popularity", "publishedAt", "relevancy"])
         self.duckduckgo_checkbox = QtWidgets.QCheckBox("Enable DuckDuckGo web search")
+        self.ai_suggestions_checkbox = QtWidgets.QCheckBox("Show AI suggested actions in insight panel")
+        self.ai_suggestions_checkbox.setChecked(True)
         self.polling_input = QtWidgets.QLineEdit()
         self.insight_refresh_combo = QtWidgets.QComboBox()
         self.insight_refresh_combo.addItems(["1", "5", "10", "15", "30"])
@@ -288,6 +335,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.news_window_combo.setToolTip("News API time window in hours.")
         self.news_sort_combo.setToolTip("NewsAPI sort order.")
         self.duckduckgo_checkbox.setToolTip("Use DuckDuckGo HTML search for additional results.")
+        self.ai_suggestions_checkbox.setToolTip("Show/hide actionable suggestions next to the AI insight summary.")
         self.polling_input.setToolTip("Polling interval in minutes (default 5).")
         self.insight_refresh_combo.setToolTip("How often to regenerate the AI insight (in minutes).")
 
@@ -310,6 +358,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         form.addRow("News time window (hours)", self.news_window_combo)
         form.addRow("NewsAPI sort order", self.news_sort_combo)
         form.addRow("", self.duckduckgo_checkbox)
+        form.addRow("", self.ai_suggestions_checkbox)
         form.addRow("Polling interval (minutes)", self.polling_input)
         form.addRow("Insight refresh (minutes)", self.insight_refresh_combo)
         api_links = QtWidgets.QLabel(
@@ -360,6 +409,7 @@ class FirstRunDialog(QtWidgets.QDialog):
             google_cse_api_key=self.google_cse_key_input.text().strip() or None,
             google_cse_cx=self.google_cse_cx_input.text().strip() or None,
             enable_duckduckgo_search=self.duckduckgo_checkbox.isChecked(),
+            enable_ai_suggestions=self.ai_suggestions_checkbox.isChecked(),
             polling_minutes=int(self.polling_input.text().strip() or "5"),
             insight_refresh_minutes=int(self.insight_refresh_combo.currentText() or "5"),
             display_timezone=self.display_timezone_value,
@@ -566,6 +616,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.config.google_cse_cx:
             dialog.google_cse_cx_input.setText(self.config.google_cse_cx)
         dialog.duckduckgo_checkbox.setChecked(self.config.enable_duckduckgo_search)
+        dialog.ai_suggestions_checkbox.setChecked(self.config.enable_ai_suggestions)
         dialog.polling_input.setText(str(self.config.polling_minutes))
         dialog.insight_refresh_combo.setCurrentText(str(self.config.insight_refresh_minutes or 5))
         if dialog.exec() == QtWidgets.QDialog.Accepted:

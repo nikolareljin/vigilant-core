@@ -10,12 +10,32 @@ All notable changes to VigilantCore will be documented in this file.
 - **Broader extreme event and crisis discovery**: Added subject-driven query/feed expansion for flooding, tornadoes, wildfires, winter storms, earthquakes, hazmat incidents, and global conflict/humanitarian crisis scenarios.
 - **Curated signal source expansion**: Added additional curated source domains used for discovery/search seeding across outage, aviation, wildfire, disaster, and crisis contexts (e.g., FAA/NAS status, InciWeb, USGS earthquake, GDACS, ReliefWeb).
 - **International regional source URL coverage**: Added curated regional source URL catalogs and localized news-query/feed generation for Canada, Europe, North Africa, China/Far East, Australia, South Africa, Central America, South America, plus broader Middle East/South Asia/Southeast Asia/Sub-Saharan Africa/global fallback coverage.
+- **Regional source preview API/UI**: Added `/api/source-preview` and a setup-page preview panel to inspect inferred region and curated source URLs from location text or coordinates before saving.
+- **Dedicated source discovery documentation**: Added `docs/source-discovery.md` documenting region inference, curated source catalogs, coordinate-driven behavior, and source preview API usage.
+- **AI suggested actions toggle**: Added a settings toggle to enable/disable actionable suggestions shown next to the AI insight result in web and Qt views.
 
 ### Changed
 
 - **Local feed generation**: Comprehensive local feed discovery now injects context-aware Google News RSS queries for likely outage/disaster/transport/conflict scenarios based on the monitored subject and location.
 - **Emergency search coverage**: Emergency search now adds local utility and transportation domain-targeted searches (including `site:poweroutage.us`) and conflict-focused queries when the subject indicates war/conflict conditions.
 - **Coordinate-driven discovery**: Region/source selection can now infer regional coverage directly from latitude/longitude when no ZIP code or location text is provided.
+
+### Details
+
+- Added region profiles with localized Google News parameters (`gl`, `hl`, `ceid`) and region-specific utility/transport/emergency query terms.
+- Added curated regional source URL catalogs for:
+  - Canada
+  - Europe (priority international baseline)
+  - North Africa
+  - China / Far East
+  - Australia
+  - South Africa
+  - Central America
+  - South America
+  - Middle East / South Asia / Southeast Asia / Sub-Saharan Africa
+  - Global fallback (disaster / humanitarian / aviation)
+- Added coordinate-based region inference using broad geographic bounding boxes so regional source selection works with lat/lon-only configurations.
+- Added setup-page source preview panel for validating inferred region and curated URLs before starting monitoring.
 
 ## [0.2.2] - 2026-02-23
 

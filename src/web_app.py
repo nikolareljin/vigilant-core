@@ -106,6 +106,37 @@ DASHBOARD_TEMPLATE = """
       line-height: 1.6;
     }
     .insight-card.expanded .insight-explanation { display: block; }
+    .insight-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .insight-left { min-width: 0; }
+    .insight-suggestions-panel {
+      display: none;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .insight-suggestions-panel.visible { display: block; }
+    .insight-suggestions-title {
+      font-size: 0.85em;
+      font-weight: 700;
+      margin-bottom: 8px;
+      opacity: 0.95;
+    }
+    .insight-suggestions-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 0.9em;
+      line-height: 1.4;
+    }
+    .insight-suggestions-list li + li { margin-top: 6px; }
+    @media (max-width: 900px) {
+      .insight-layout { grid-template-columns: 1fr; }
+    }
     .insight-sources {
       margin-top: 12px;
       font-size: 0.85em;
@@ -143,8 +174,16 @@ DASHBOARD_TEMPLATE = """
   <!-- Monitoring Question Insight Card -->
   <div id="insightCard" class="insight-card">
     <div class="insight-question" id="insightQuestion"></div>
-    <div class="insight-summary" id="insightSummary" onclick="toggleInsight()"></div>
-    <div class="insight-explanation" id="insightExplanation"></div>
+    <div class="insight-layout">
+      <div class="insight-left">
+        <div class="insight-summary" id="insightSummary" onclick="toggleInsight()"></div>
+        <div class="insight-explanation" id="insightExplanation"></div>
+      </div>
+      <div class="insight-suggestions-panel" id="insightSuggestionsPanel">
+        <div class="insight-suggestions-title">Suggested actions</div>
+        <ul class="insight-suggestions-list" id="insightSuggestionsList"></ul>
+      </div>
+    </div>
     <div class="insight-sources" id="insightSources"></div>
     <div class="insight-timestamp" id="insightTimestamp"></div>
   </div>
@@ -208,6 +247,21 @@ async function loadInsight() {
     document.getElementById('insightQuestion').textContent = data.question;
     document.getElementById('insightSummary').textContent = data.summary;
     document.getElementById('insightExplanation').textContent = data.explanation || '';
+    const suggestionsPanel = document.getElementById('insightSuggestionsPanel');
+    const suggestionsList = document.getElementById('insightSuggestionsList');
+    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    if (suggestions.length > 0) {
+      suggestionsList.innerHTML = '';
+      suggestions.slice(0, 5).forEach((item) => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        suggestionsList.appendChild(li);
+      });
+      suggestionsPanel.classList.add('visible');
+    } else {
+      suggestionsList.innerHTML = '';
+      suggestionsPanel.classList.remove('visible');
+    }
 
     // Show sources if available
     const sourcesDiv = document.getElementById('insightSources');
@@ -429,6 +483,12 @@ SETUP_TEMPLATE = """
         <option value="30" {% if insight_mins == 30 %}selected{% endif %}>Every 30 minutes</option>
       </select>
       <div class="help">How often to regenerate the AI insight for your monitoring question.</div>
+
+      <label>Show AI suggested actions</label>
+      <select name="enable_ai_suggestions">
+        <option value="yes" {% if config.enable_ai_suggestions %}selected{% endif %}>Yes (show actionable suggestions next to the result)</option>
+        <option value="no" {% if not config.enable_ai_suggestions %}selected{% endif %}>No</option>
+      </select>
     </div>
 
     <!-- TIMING -->
@@ -715,6 +775,9 @@ def setup() -> str:
         config.enable_duckduckgo_search = (
             request.form.get("enable_duckduckgo_search", "yes") == "yes"
         )
+        config.enable_ai_suggestions = (
+            request.form.get("enable_ai_suggestions", "yes") == "yes"
+        )
         insight_mins_val = request.form.get("insight_refresh_minutes", "5").strip()
         try:
             config.insight_refresh_minutes = max(1, int(insight_mins_val))
@@ -773,6 +836,7 @@ def api_insight() -> str:
             "question": config.question,
             "summary": "No relevant data available.",
             "explanation": "No alerts have been collected yet. Check back after the monitoring system gathers data.",
+            "suggestions": [] if config.enable_ai_suggestions else [],
             "sources_used": [],
         })
 
@@ -827,14 +891,22 @@ def api_insight() -> str:
             f"If asked about probability or likelihood, provide a percentage estimate with brief reasoning."
         )
 
-        user_prompt = (
-            f"MONITORING QUESTION: {config.question}\n\n"
-            f"RECENT ALERTS AND NEWS:\n{context}\n\n"
-            f"Provide your response as JSON with these keys:\n"
-            f'- "summary": A 1-2 sentence direct answer (include probability % if asked about likelihood)\n'
-            f'- "explanation": A 2-4 sentence detailed explanation of how you reached this conclusion, citing specific sources\n'
-            f"Respond with ONLY valid JSON, no other text."
-        )
+        prompt_lines = [
+            f"MONITORING QUESTION: {config.question}",
+            "",
+            "RECENT ALERTS AND NEWS:",
+            context,
+            "",
+            "Provide your response as JSON with these keys:",
+            '- "summary": A 1-2 sentence direct answer (include probability % if asked about likelihood)',
+            '- "explanation": A 2-4 sentence detailed explanation of how you reached this conclusion, citing specific sources',
+        ]
+        if config.enable_ai_suggestions:
+            prompt_lines.append(
+                '- "suggestions": 2-5 short actionable suggestions for what the user should do and how to react in this specific situation (safety-first, context-aware, concise)'
+            )
+        prompt_lines.append("Respond with ONLY valid JSON, no other text.")
+        user_prompt = "\n".join(prompt_lines)
 
         response = client.chat(
             model=model,
@@ -864,6 +936,7 @@ def api_insight() -> str:
             "question": config.question,
             "summary": payload.get("summary", "Unable to generate summary."),
             "explanation": payload.get("explanation", ""),
+            "suggestions": _normalize_suggestions(payload.get("suggestions")) if config.enable_ai_suggestions else [],
             "sources_used": list(sources_used)[:10],
         })
 
