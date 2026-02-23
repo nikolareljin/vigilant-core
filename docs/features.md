@@ -98,6 +98,7 @@ The setup page includes a regional source preview panel that:
 - Infers the region from location text / ZIP / latitude-longitude
 - Shows curated source URLs that will be prioritized for discovery
 - Works before saving settings
+- Validates latitude/longitude ranges before preview inference
 
 You can also query the same data programmatically via `GET /api/source-preview`.
 
@@ -133,6 +134,16 @@ Enhance coverage with API keys:
 | NewsAPI | Yes | 150,000+ news sources |
 | Google CSE | Yes | Custom web search |
 | Bing Search | Yes | Microsoft web search |
+
+### Low-Bandwidth / Tethered Optimization
+
+For tethered or constrained connections, enable the low-bandwidth optimization setting in web or Qt setup.
+
+Effects:
+- smaller contextual feed/query budgets
+- fewer feed-discovery requests per source/query
+- capped RSS polling feed list size
+- cached feed discovery/validation lookups to reduce repeated network pulls
 
 ### Custom RSS Feeds
 

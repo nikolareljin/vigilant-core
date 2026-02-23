@@ -26,6 +26,15 @@ All notable changes to VigilantCore will be documented in this file.
 - **Central America coordinate bounds**: Narrowed the coordinate classifier to avoid routing southern US coordinates (for example Houston / Gulf Coast) into the Central America profile.
 - **Conflict keyword false positives**: Conflict query expansion now uses token/phrase matching and avoids substring matches such as `hardware` triggering `war`.
 - **AI suggestions toggle persistence**: Saving settings now removes a stale `.env` file when no env-backed overrides remain, so re-enabling AI suggestions is not overridden by an old `ENABLE_AI_SUGGESTIONS=false`.
+- **Source preview safety/validation**: Web source preview now builds URL links via DOM APIs (no HTML interpolation) and validates latitude/longitude ranges before region inference.
+- **DuckDuckGo toggle persistence**: `ENABLE_DUCKDUCKGO_SEARCH=false` now persists in `.env` when disabled.
+- **Shared insight helpers**: Suggestion normalization helpers are centralized in `utils/insight.py` to avoid web/Qt drift.
+- **Region overlap precedence**: Region overlap behavior is explicitly documented and preserved with deterministic precedence for border regions.
+
+### Changed
+
+- **Network discovery performance**: Feed discovery now caches page HTML/feed validation results in-process and deduplicates repeated base-url scans to reduce startup/network request volume.
+- **Low-bandwidth/tethered mode**: Added a settings toggle that reduces discovery/query budgets, caps contextual feeds and RSS breadth, and lowers emergency/DDG request sizes for constrained connections.
 
 ### Details
 

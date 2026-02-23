@@ -42,6 +42,12 @@ The inference uses broad geographic bounding boxes and then applies region-speci
 - Utility / transport / emergency query terms
 - Curated source URL seeds
 
+### Region Overlaps and Precedence
+
+Some coordinate boxes intentionally overlap in border areas (for example North Africa vs. Sub-Saharan Africa, and South Asia / China / Southeast Asia). VigilantCore uses a deterministic precedence order in `infer_region_profile()` to keep routing stable while still allowing approximate border-region coverage.
+
+This is intentional and avoids extra network discovery passes across multiple regions unless you explicitly change the location.
+
 ## What Gets Monitored (Examples)
 
 ### Utilities & Outages
@@ -150,6 +156,18 @@ curl "http://127.0.0.1:8765/api/source-preview?location_name=Toronto,%20Ontario,
 - Curated URLs are used as feed-discovery seeds, not guaranteed direct RSS endpoints.
 - Search/API sources complement RSS when feeds are unavailable.
 - Region inference is intentionally approximate (fast, offline, and robust).
+- Coordinate inputs are validated (`lat=-90..90`, `lon=-180..180`) before region inference/preview.
+- Feed discovery and validation use in-process caching to reduce repeated startup requests.
+
+## Low-Bandwidth / Tethered Mode
+
+If you are on a tethered/mobile hotspot connection, enable the low-bandwidth mode in settings.
+
+The mode reduces network usage by:
+- lowering discovery query counts and per-query result limits
+- scanning fewer curated sources/candidate feed paths
+- capping contextual Google News feed expansion
+- capping local comprehensive feed lists and RSS polling breadth
 
 ## Tuning Recommendations
 

@@ -145,6 +145,7 @@ The setup page includes a **Regional Source Preview** panel that shows:
 - inferred region key/label
 - curated source URL count
 - curated source URLs that will be prioritized
+- coordinate values are range-validated before region inference (`lat=-90..90`, `lon=-180..180`)
 
 Programmatic preview:
 
@@ -399,6 +400,13 @@ BING_SEARCH_SAFE=Moderate
 DuckDuckGo HTML search is available without an API key. Enable/disable it in Settings:
 - Web UI: **Enable DuckDuckGo web search**
 - Qt UI: **Enable DuckDuckGo web search**
+
+### Tethered / Low-Bandwidth Mode
+If you are on a mobile hotspot or tethered connection, enable:
+- Web UI: **Optimize for tethered / low-bandwidth connection**
+- Qt UI: **Optimize for tethered / low-bandwidth connection**
+
+This mode reduces request volume by limiting source discovery/query budgets and capping feed polling/discovery breadth.
 
 ### Facebook & Instagram (Meta Graph API)
 Meta does not provide a general public search API. Access typically requires:
