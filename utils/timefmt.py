@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import Optional
 
 try:
@@ -11,7 +11,7 @@ except ImportError:  # pragma: no cover - Python <3.9 fallback
     ZoneInfo = None  # type: ignore[assignment]
 
 
-def _resolve_display_timezone(tz_name: Optional[str]):
+def _resolve_display_timezone(tz_name: Optional[str]) -> Optional[tzinfo]:
     """Return the configured display tz, or the current host local tz."""
     if tz_name:
         if ZoneInfo is None:
