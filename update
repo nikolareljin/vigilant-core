@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_HELPERS_PATH="scripts/script-helpers"
+SCRIPT_HELPERS_DIR="$ROOT_DIR/$SCRIPT_HELPERS_PATH"
 cd "$ROOT_DIR"
 
 echo "Synchronizing submodule URLs..."
@@ -13,16 +15,25 @@ if ! git submodule update --init --remote --recursive; then
   git submodule update --init --recursive
 fi
 
-if [[ ! -f "$ROOT_DIR/scripts/script-helpers/helpers.sh" ]]; then
-  SHARED_HELPERS_DIR="$ROOT_DIR/../script-helpers"
-  if [[ -f "$SHARED_HELPERS_DIR/helpers.sh" ]]; then
-    echo "script-helpers submodule missing; using shared workspace copy..."
-    mkdir -p "$ROOT_DIR/scripts/script-helpers"
-    cp -R "$SHARED_HELPERS_DIR/." "$ROOT_DIR/scripts/script-helpers/"
+if [[ -d "$SCRIPT_HELPERS_DIR/.git" || -f "$SCRIPT_HELPERS_DIR/.git" ]]; then
+  echo "Aligning $SCRIPT_HELPERS_PATH to the production branch..."
+  if git -C "$SCRIPT_HELPERS_DIR" show-ref --verify --quiet refs/remotes/origin/production; then
+    git -C "$SCRIPT_HELPERS_DIR" checkout -B production origin/production
+  else
+    echo "origin/production not available locally for $SCRIPT_HELPERS_PATH; keeping current checkout." >&2
   fi
 fi
 
-if [[ ! -f "$ROOT_DIR/scripts/script-helpers/helpers.sh" ]]; then
+if [[ ! -f "$SCRIPT_HELPERS_DIR/helpers.sh" ]]; then
+  SHARED_HELPERS_DIR="$ROOT_DIR/../script-helpers"
+  if [[ -f "$SHARED_HELPERS_DIR/helpers.sh" ]]; then
+    echo "script-helpers submodule missing; using shared workspace copy..."
+    mkdir -p "$SCRIPT_HELPERS_DIR"
+    cp -R "$SHARED_HELPERS_DIR/." "$SCRIPT_HELPERS_DIR/"
+  fi
+fi
+
+if [[ ! -f "$SCRIPT_HELPERS_DIR/helpers.sh" ]]; then
   echo "script-helpers still not found. Ensure submodules are available or run from a clone with access." >&2
   exit 1
 fi
