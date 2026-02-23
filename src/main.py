@@ -35,6 +35,24 @@ def _normalize_suggestions(value) -> list[str]:
     return []
 
 
+def _normalize_suggestions_origin(value, suggestions: list[str]) -> str:
+    if not suggestions:
+        return "none"
+    if isinstance(value, str):
+        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "official": "official_paraphrase",
+            "official_only": "official_paraphrase",
+            "paraphrase": "official_paraphrase",
+            "ai": "ai_assisted",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized in {"official_paraphrase", "ai_assisted", "mixed"}:
+            return normalized
+    # Conservative fallback: if the model returned suggestions but no origin, treat as AI-assisted.
+    return "ai_assisted"
+
+
 def generate_insight(config: AppConfig) -> Optional[Dict]:
     """Generate AI insight based on monitoring question and recent alerts."""
     if not config.question or not config.question.strip():
@@ -47,6 +65,7 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             "summary": "No relevant data available.",
             "explanation": "No alerts have been collected yet.",
             "suggestions": [],
+            "suggestions_origin": "none",
             "sources_used": [],
         }
 
@@ -109,6 +128,15 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             prompt_lines.append(
                 '- "suggestions": 2-5 short actionable suggestions for what the user should do next or how to react (specific to this situation and location; safety-first)'
             )
+            prompt_lines.append(
+                '- "suggestions_origin": one of "official_paraphrase", "ai_assisted", or "mixed"'
+            )
+            prompt_lines.append(
+                'Suggestion policy: first summarize/paraphrase official guidance (authorities, utilities, emergency services, transport agencies) when available. '
+                'Only fill gaps with your own suggested actions when official guidance is missing or incomplete. '
+                'Use "official_paraphrase" if suggestions only paraphrase officials; use "ai_assisted" if suggestions are your own gap-filling guidance; '
+                'use "mixed" if both are present.'
+            )
         prompt_lines.append("Respond with ONLY valid JSON, no other text.")
         user_prompt = "\n".join(prompt_lines)
 
@@ -131,11 +159,13 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
         except json.JSONDecodeError:
             payload = {"summary": content[:300], "explanation": content}
 
+        suggestions = _normalize_suggestions(payload.get("suggestions")) if config.enable_ai_suggestions else []
         return {
             "question": config.question,
             "summary": payload.get("summary", "Unable to generate summary."),
             "explanation": payload.get("explanation", ""),
-            "suggestions": _normalize_suggestions(payload.get("suggestions")) if config.enable_ai_suggestions else [],
+            "suggestions": suggestions,
+            "suggestions_origin": _normalize_suggestions_origin(payload.get("suggestions_origin"), suggestions),
             "sources_used": list(sources_used)[:10],
         }
 
@@ -219,6 +249,12 @@ class InsightWidget(QtWidgets.QFrame):
         )
         self.suggestions_label.setWordWrap(True)
         self.suggestions_label.setVisible(False)
+        self.suggestions_note_label = QtWidgets.QLabel()
+        self.suggestions_note_label.setStyleSheet(
+            "font-size: 11px; margin-top: 4px; color: #fff1b3;"
+        )
+        self.suggestions_note_label.setWordWrap(True)
+        self.suggestions_note_label.setVisible(False)
 
         # Sources
         self.sources_label = QtWidgets.QLabel()
@@ -235,6 +271,7 @@ class InsightWidget(QtWidgets.QFrame):
         layout.addWidget(self.question_label)
         layout.addWidget(self.summary_label)
         layout.addWidget(self.suggestions_label)
+        layout.addWidget(self.suggestions_note_label)
         layout.addWidget(self.expand_indicator)
         layout.addWidget(self.explanation_label)
         layout.addWidget(self.sources_label)
@@ -260,14 +297,27 @@ class InsightWidget(QtWidgets.QFrame):
         self.summary_label.setText(summary)
         self.explanation_label.setText(data.get("explanation", ""))
         suggestions = _normalize_suggestions(data.get("suggestions"))
+        suggestions_origin = _normalize_suggestions_origin(data.get("suggestions_origin"), suggestions)
         if suggestions:
             self.suggestions_label.setText(
                 "Suggested actions:\n" + "\n".join(f"- {item}" for item in suggestions)
             )
             self.suggestions_label.setVisible(True)
+            if suggestions_origin in {"ai_assisted", "mixed"}:
+                if suggestions_origin == "mixed":
+                    note = "Caution: Some suggested actions are AI-assisted gap-filling beyond official guidance and may contain errors."
+                else:
+                    note = "Caution: Suggested actions are AI-assisted (generated to fill gaps beyond official guidance) and may contain errors."
+                self.suggestions_note_label.setText(note)
+                self.suggestions_note_label.setVisible(True)
+            else:
+                self.suggestions_note_label.setText("")
+                self.suggestions_note_label.setVisible(False)
         else:
             self.suggestions_label.setText("")
             self.suggestions_label.setVisible(False)
+            self.suggestions_note_label.setText("")
+            self.suggestions_note_label.setVisible(False)
 
         sources = data.get("sources_used", [])
         if sources:

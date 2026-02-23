@@ -134,6 +134,16 @@ DASHBOARD_TEMPLATE = """
       line-height: 1.4;
     }
     .insight-suggestions-list li + li { margin-top: 6px; }
+    .insight-suggestions-note {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      font-size: 0.78em;
+      line-height: 1.35;
+      color: #fff1b3;
+    }
+    .insight-suggestions-note.visible { display: block; }
     @media (max-width: 900px) {
       .insight-layout { grid-template-columns: 1fr; }
     }
@@ -182,6 +192,7 @@ DASHBOARD_TEMPLATE = """
       <div class="insight-suggestions-panel" id="insightSuggestionsPanel">
         <div class="insight-suggestions-title">Suggested actions</div>
         <ul class="insight-suggestions-list" id="insightSuggestionsList"></ul>
+        <div class="insight-suggestions-note" id="insightSuggestionsNote"></div>
       </div>
     </div>
     <div class="insight-sources" id="insightSources"></div>
@@ -249,7 +260,9 @@ async function loadInsight() {
     document.getElementById('insightExplanation').textContent = data.explanation || '';
     const suggestionsPanel = document.getElementById('insightSuggestionsPanel');
     const suggestionsList = document.getElementById('insightSuggestionsList');
+    const suggestionsNote = document.getElementById('insightSuggestionsNote');
     const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    const suggestionsOrigin = typeof data.suggestions_origin === 'string' ? data.suggestions_origin : 'none';
     if (suggestions.length > 0) {
       suggestionsList.innerHTML = '';
       suggestions.slice(0, 5).forEach((item) => {
@@ -257,9 +270,20 @@ async function loadInsight() {
         li.textContent = item;
         suggestionsList.appendChild(li);
       });
+      if (suggestionsOrigin === 'ai_assisted' || suggestionsOrigin === 'mixed') {
+        suggestionsNote.textContent = suggestionsOrigin === 'mixed'
+          ? 'Caution: Some suggested actions are AI-assisted gap-filling beyond official guidance and may contain errors.'
+          : 'Caution: Suggested actions are AI-assisted (generated to fill gaps beyond official guidance) and may contain errors.';
+        suggestionsNote.classList.add('visible');
+      } else {
+        suggestionsNote.textContent = '';
+        suggestionsNote.classList.remove('visible');
+      }
       suggestionsPanel.classList.add('visible');
     } else {
       suggestionsList.innerHTML = '';
+      suggestionsNote.textContent = '';
+      suggestionsNote.classList.remove('visible');
       suggestionsPanel.classList.remove('visible');
     }
 
@@ -721,6 +745,23 @@ def _normalize_suggestions(value) -> list[str]:
     return []
 
 
+def _normalize_suggestions_origin(value, suggestions: list[str]) -> str:
+    if not suggestions:
+        return "none"
+    if isinstance(value, str):
+        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "official": "official_paraphrase",
+            "official_only": "official_paraphrase",
+            "paraphrase": "official_paraphrase",
+            "ai": "ai_assisted",
+        }
+        normalized = aliases.get(normalized, normalized)
+        if normalized in {"official_paraphrase", "ai_assisted", "mixed"}:
+            return normalized
+    return "ai_assisted"
+
+
 @app.route("/favicon.ico")
 def favicon():
     return send_from_directory(
@@ -837,6 +878,7 @@ def api_insight() -> str:
             "summary": "No relevant data available.",
             "explanation": "No alerts have been collected yet. Check back after the monitoring system gathers data.",
             "suggestions": [] if config.enable_ai_suggestions else [],
+            "suggestions_origin": "none",
             "sources_used": [],
         })
 
@@ -905,6 +947,15 @@ def api_insight() -> str:
             prompt_lines.append(
                 '- "suggestions": 2-5 short actionable suggestions for what the user should do and how to react in this specific situation (safety-first, context-aware, concise)'
             )
+            prompt_lines.append(
+                '- "suggestions_origin": one of "official_paraphrase", "ai_assisted", or "mixed"'
+            )
+            prompt_lines.append(
+                'Suggestion policy: first summarize/paraphrase official guidance (authorities, utilities, emergency services, transport agencies) when available. '
+                'Only fill gaps with your own suggested actions when official guidance is missing or incomplete. '
+                'Use "official_paraphrase" if suggestions only paraphrase officials; use "ai_assisted" if suggestions are your own gap-filling guidance; '
+                'use "mixed" if both are present.'
+            )
         prompt_lines.append("Respond with ONLY valid JSON, no other text.")
         user_prompt = "\n".join(prompt_lines)
 
@@ -931,12 +982,14 @@ def api_insight() -> str:
             # Fallback: treat entire response as summary
             payload = {"summary": content[:300], "explanation": content}
 
+        suggestions = _normalize_suggestions(payload.get("suggestions")) if config.enable_ai_suggestions else []
         return jsonify({
             "has_question": True,
             "question": config.question,
             "summary": payload.get("summary", "Unable to generate summary."),
             "explanation": payload.get("explanation", ""),
-            "suggestions": _normalize_suggestions(payload.get("suggestions")) if config.enable_ai_suggestions else [],
+            "suggestions": suggestions,
+            "suggestions_origin": _normalize_suggestions_origin(payload.get("suggestions_origin"), suggestions),
             "sources_used": list(sources_used)[:10],
         })
 
