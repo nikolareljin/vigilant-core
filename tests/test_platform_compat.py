@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import os
 import sys
 import tempfile
@@ -9,79 +8,71 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-
-def _import_config_module():
-    """Import utils.config even if python-dotenv is not installed locally."""
-    sys.modules.pop("utils.config", None)
+try:
+    import utils.config as config_mod
+except ModuleNotFoundError as exc:
+    if exc.name != "dotenv":
+        raise
     fake_dotenv = types.SimpleNamespace(load_dotenv=lambda *args, **kwargs: None)
     with mock.patch.dict(sys.modules, {"dotenv": fake_dotenv}):
-        return importlib.import_module("utils.config")
+        import utils.config as config_mod
 
 
 class ConfigPathTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.config_mod = _import_config_module()
-
     def test_config_dir_windows_uses_appdata(self) -> None:
         with (
-            mock.patch.object(self.config_mod.sys, "platform", "win32"),
+            mock.patch.object(config_mod.sys, "platform", "win32"),
             mock.patch.dict(os.environ, {"APPDATA": "C:/Users/test/AppData/Roaming"}, clear=False),
         ):
             self.assertEqual(
-                self.config_mod.config_dir(),
-                Path("C:/Users/test/AppData/Roaming") / self.config_mod.APP_NAME,
+                config_mod.config_dir(),
+                Path("C:/Users/test/AppData/Roaming") / config_mod.APP_NAME,
             )
 
     def test_config_dir_macos_uses_application_support(self) -> None:
-        fake_home = Path("/Users/tester")
-        with (
-            mock.patch.object(self.config_mod.sys, "platform", "darwin"),
-            mock.patch.object(self.config_mod.Path, "home", return_value=fake_home),
-        ):
+        fake_home = Path.home()
+        with mock.patch.object(config_mod.sys, "platform", "darwin"):
             self.assertEqual(
-                self.config_mod.config_dir(),
-                fake_home / "Library" / "Application Support" / self.config_mod.APP_NAME,
+                config_mod.config_dir(),
+                fake_home / "Library" / "Application Support" / config_mod.APP_NAME,
             )
 
     def test_data_dir_windows_uses_localappdata(self) -> None:
         with (
-            mock.patch.object(self.config_mod.sys, "platform", "win32"),
+            mock.patch.object(config_mod.sys, "platform", "win32"),
             mock.patch.dict(os.environ, {"LOCALAPPDATA": "C:/Users/test/AppData/Local"}, clear=False),
         ):
             self.assertEqual(
-                self.config_mod.data_dir(),
-                Path("C:/Users/test/AppData/Local") / self.config_mod.APP_NAME,
+                config_mod.data_dir(),
+                Path("C:/Users/test/AppData/Local") / config_mod.APP_NAME,
             )
 
     def test_data_dir_macos_uses_application_support(self) -> None:
-        fake_home = Path("/Users/tester")
-        with (
-            mock.patch.object(self.config_mod.sys, "platform", "darwin"),
-            mock.patch.object(self.config_mod.Path, "home", return_value=fake_home),
-        ):
+        fake_home = Path.home()
+        with mock.patch.object(config_mod.sys, "platform", "darwin"):
             self.assertEqual(
-                self.config_mod.data_dir(),
-                fake_home / "Library" / "Application Support" / self.config_mod.APP_NAME,
+                config_mod.data_dir(),
+                fake_home / "Library" / "Application Support" / config_mod.APP_NAME,
             )
 
     def test_config_dir_linux_uses_xdg_config_home(self) -> None:
         with (
-            mock.patch.object(self.config_mod.sys, "platform", "linux"),
+            mock.patch.object(config_mod.sys, "platform", "linux"),
             mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/home/test/.config"}, clear=False),
         ):
             self.assertEqual(
-                self.config_mod.config_dir(),
-                Path("/home/test/.config") / self.config_mod.APP_NAME,
+                config_mod.config_dir(),
+                Path("/home/test/.config") / config_mod.APP_NAME,
             )
 
     def test_data_dir_linux_uses_xdg_data_home(self) -> None:
         with (
-            mock.patch.object(self.config_mod.sys, "platform", "linux"),
+            mock.patch.object(config_mod.sys, "platform", "linux"),
             mock.patch.dict(os.environ, {"XDG_DATA_HOME": "/home/test/.local/share"}, clear=False),
         ):
             self.assertEqual(
-                self.config_mod.data_dir(),
-                Path("/home/test/.local/share") / self.config_mod.APP_NAME,
+                config_mod.data_dir(),
+                Path("/home/test/.local/share") / config_mod.APP_NAME,
             )
 
 
