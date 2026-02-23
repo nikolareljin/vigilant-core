@@ -973,11 +973,21 @@ def _infer_region_from_coords(
     lon = float(longitude)
 
     # Rough geographic boxes for source-language/region selection.
-    if 24 <= lat <= 84 and -170 <= lon <= -52:
-        if lat >= 41 and -141 <= lon <= -52:
-            return REGION_PROFILES["canada"]
-        if 7 <= lat <= 19.5 and -93.5 <= lon <= -76:
-            return REGION_PROFILES["central_america"]
+    # North America / Central America:
+    # - Central America and Canada are checked first with tighter bounds.
+    # - The broader US box is evaluated afterward and includes Hawaii.
+    if 7 <= lat <= 19.5 and -93.5 <= lon <= -76:
+        return REGION_PROFILES["central_america"]
+
+    # Canada: use a stricter western latitude floor to keep Seattle in US, while
+    # allowing lower-lat eastern Canadian metros (e.g., Toronto) to map to Canada.
+    if (
+        (49 <= lat <= 84 and -141 <= lon < -95)
+        or (42 <= lat <= 84 and -95 <= lon <= -52)
+    ):
+        return REGION_PROFILES["canada"]
+
+    if 18 <= lat <= 72 and -170 <= lon <= -52:
         return REGION_PROFILES["us"]
 
     if 34 <= lat <= 72 and -25 <= lon <= 45:

@@ -70,6 +70,20 @@ class SourceQueryTests(unittest.TestCase):
         region = infer_region_profile(latitude=29.7604, longitude=-95.3698)  # Houston
         self.assertEqual(region.key, "us")
 
+    def test_region_inference_routes_guatemala_city_to_central_america(self) -> None:
+        region = infer_region_profile(latitude=14.6349, longitude=-90.5069)  # Guatemala City
+        self.assertEqual(region.key, "central_america")
+
+    def test_region_inference_keeps_northern_us_cities_as_us_not_canada(self) -> None:
+        seattle = infer_region_profile(latitude=47.6062, longitude=-122.3321)  # Seattle
+        chicago = infer_region_profile(latitude=41.8781, longitude=-87.6298)  # Chicago
+        self.assertEqual(seattle.key, "us")
+        self.assertEqual(chicago.key, "us")
+
+    def test_region_inference_treats_honolulu_as_us_outside_continental_box(self) -> None:
+        region = infer_region_profile(latitude=21.3069, longitude=-157.8583)  # Honolulu
+        self.assertEqual(region.key, "us")
+
     def test_regional_signal_sources_cover_requested_regions(self) -> None:
         europe_urls = {s.url for s in regional_signal_sources(latitude=50.1109, longitude=8.6821)}  # Frankfurt
         canada_urls = {s.url for s in regional_signal_sources(latitude=43.6532, longitude=-79.3832)}  # Toronto

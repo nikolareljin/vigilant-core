@@ -218,7 +218,29 @@ def save_config(config: AppConfig) -> None:
     if config.low_bandwidth_mode:
         env_lines.append("LOW_BANDWIDTH_MODE=true")
     dot_env = env_path()
-    if env_lines:
-        dot_env.write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+    managed_keys = {
+        "NEWS_API_KEY",
+        "DISPLAY_TIMEZONE",
+        "GOOGLE_CSE_API_KEY",
+        "GOOGLE_CSE_CX",
+        "ENABLE_AI_SUGGESTIONS",
+        "ENABLE_DUCKDUCKGO_SEARCH",
+        "LOW_BANDWIDTH_MODE",
+    }
+    preserved_lines: list[str] = []
+    if dot_env.exists():
+        for line in dot_env.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in line:
+                preserved_lines.append(line)
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key in managed_keys:
+                continue
+            preserved_lines.append(line)
+
+    merged_lines = preserved_lines + env_lines
+    if merged_lines:
+        dot_env.write_text("\n".join(merged_lines) + "\n", encoding="utf-8")
     elif dot_env.exists():
         dot_env.unlink()
