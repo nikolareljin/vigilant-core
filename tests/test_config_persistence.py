@@ -23,6 +23,18 @@ class ConfigPersistenceTests(unittest.TestCase):
                 save_config(enabled)
                 self.assertFalse(dot_env.exists())
 
+    def test_save_config_persists_duckduckgo_disable_and_low_bandwidth_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_root = Path(tmpdir)
+            with patch("utils.config.config_dir", return_value=cfg_root):
+                cfg = AppConfig(enable_duckduckgo_search=False, low_bandwidth_mode=True)
+                save_config(cfg)
+                dot_env = cfg_root / ".env"
+                self.assertTrue(dot_env.exists())
+                env_text = dot_env.read_text(encoding="utf-8")
+                self.assertIn("ENABLE_DUCKDUCKGO_SEARCH=false", env_text)
+                self.assertIn("LOW_BANDWIDTH_MODE=true", env_text)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

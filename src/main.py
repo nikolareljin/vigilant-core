@@ -332,6 +332,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.news_sort_combo.addItems(["popularity", "publishedAt", "relevancy"])
         self.duckduckgo_checkbox = QtWidgets.QCheckBox("Enable DuckDuckGo web search")
         self.ai_suggestions_checkbox = QtWidgets.QCheckBox("Show AI suggested actions in insight panel")
+        self.low_bandwidth_checkbox = QtWidgets.QCheckBox("Optimize for tethered / low-bandwidth connection")
         self.ai_suggestions_checkbox.setChecked(True)
         self.polling_input = QtWidgets.QLineEdit()
         self.insight_refresh_combo = QtWidgets.QComboBox()
@@ -356,6 +357,9 @@ class FirstRunDialog(QtWidgets.QDialog):
         self.news_sort_combo.setToolTip("NewsAPI sort order.")
         self.duckduckgo_checkbox.setToolTip("Use DuckDuckGo HTML search for additional results.")
         self.ai_suggestions_checkbox.setToolTip("Show/hide actionable suggestions next to the AI insight summary.")
+        self.low_bandwidth_checkbox.setToolTip(
+            "Reduce source discovery/network requests (recommended for mobile hotspot or tethered connections)."
+        )
         self.polling_input.setToolTip("Polling interval in minutes (default 5).")
         self.insight_refresh_combo.setToolTip("How often to regenerate the AI insight (in minutes).")
 
@@ -379,6 +383,7 @@ class FirstRunDialog(QtWidgets.QDialog):
         form.addRow("NewsAPI sort order", self.news_sort_combo)
         form.addRow("", self.duckduckgo_checkbox)
         form.addRow("", self.ai_suggestions_checkbox)
+        form.addRow("", self.low_bandwidth_checkbox)
         form.addRow("Polling interval (minutes)", self.polling_input)
         form.addRow("Insight refresh (minutes)", self.insight_refresh_combo)
         api_links = QtWidgets.QLabel(
@@ -430,6 +435,7 @@ class FirstRunDialog(QtWidgets.QDialog):
             google_cse_cx=self.google_cse_cx_input.text().strip() or None,
             enable_duckduckgo_search=self.duckduckgo_checkbox.isChecked(),
             enable_ai_suggestions=self.ai_suggestions_checkbox.isChecked(),
+            low_bandwidth_mode=self.low_bandwidth_checkbox.isChecked(),
             polling_minutes=int(self.polling_input.text().strip() or "5"),
             insight_refresh_minutes=int(self.insight_refresh_combo.currentText() or "5"),
             display_timezone=self.display_timezone_value,
@@ -637,6 +643,7 @@ class MainWindow(QtWidgets.QMainWindow):
             dialog.google_cse_cx_input.setText(self.config.google_cse_cx)
         dialog.duckduckgo_checkbox.setChecked(self.config.enable_duckduckgo_search)
         dialog.ai_suggestions_checkbox.setChecked(self.config.enable_ai_suggestions)
+        dialog.low_bandwidth_checkbox.setChecked(self.config.low_bandwidth_mode)
         dialog.polling_input.setText(str(self.config.polling_minutes))
         dialog.insight_refresh_combo.setCurrentText(str(self.config.insight_refresh_minutes or 5))
         if dialog.exec() == QtWidgets.QDialog.Accepted:

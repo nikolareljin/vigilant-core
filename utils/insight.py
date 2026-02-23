@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
 
-def normalize_suggestions(value) -> list[str]:
+
+def normalize_suggestions(value: list[Any] | str | None) -> list[str]:
     if isinstance(value, list):
         cleaned = []
         for item in value:
@@ -19,7 +21,7 @@ def normalize_suggestions(value) -> list[str]:
     return []
 
 
-def normalize_suggestions_origin(value, suggestions: list[str]) -> str:
+def normalize_suggestions_origin(value: str | None, suggestions: list[str]) -> str:
     if not suggestions:
         return "none"
     if isinstance(value, str):

@@ -578,6 +578,12 @@ SETUP_TEMPLATE = """
         <option value="yes" {% if config.enable_duckduckgo_search %}selected{% endif %}>Yes (default, no API key required)</option>
         <option value="no" {% if not config.enable_duckduckgo_search %}selected{% endif %}>No</option>
       </select>
+
+      <label>Optimize for tethered / low-bandwidth connection</label>
+      <select name="low_bandwidth_mode">
+        <option value="no" {% if not config.low_bandwidth_mode %}selected{% endif %}>No (standard discovery)</option>
+        <option value="yes" {% if config.low_bandwidth_mode %}selected{% endif %}>Yes (fewer requests, smaller feed/query budgets)</option>
+      </select>
     </div>
 
     <!-- DATA SOURCES - NEWS API -->
@@ -643,7 +649,17 @@ SETUP_TEMPLATE = """
           list.innerHTML = '<li>No curated regional URLs available for this location yet.</li>';
           return;
         }
-        list.innerHTML = data.urls.slice(0, 25).map((url) => `<li><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></li>`).join('');
+        list.innerHTML = '';
+        data.urls.slice(0, 25).forEach((url) => {
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.href = String(url);
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = String(url);
+          li.appendChild(a);
+          list.appendChild(li);
+        });
       } catch (err) {
         meta.textContent = 'Failed to load preview.';
         list.innerHTML = '<li>Could not fetch source preview.</li>';
@@ -733,6 +749,17 @@ def _source_preview_payload(config: AppConfig) -> dict:
     }
 
 
+def _parse_coordinate(raw: str, minimum: float, maximum: float) -> Optional[float]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return value if minimum <= value <= maximum else None
+
+
 @app.route("/favicon.ico")
 def favicon():
     return send_from_directory(
@@ -758,10 +785,10 @@ def setup() -> str:
         config.question = request.form.get("question", "").strip()
         config.prefer_light_model = request.form.get("prefer_light_model", "yes") == "yes"
         config.zip_code = request.form.get("zip_code") or None
-        lat_val = request.form.get("latitude", "").strip()
-        lon_val = request.form.get("longitude", "").strip()
-        config.latitude = float(lat_val) if lat_val else None
-        config.longitude = float(lon_val) if lon_val else None
+        lat_val = request.form.get("latitude", "")
+        lon_val = request.form.get("longitude", "")
+        config.latitude = _parse_coordinate(lat_val, -90.0, 90.0)
+        config.longitude = _parse_coordinate(lon_val, -180.0, 180.0)
         radius_val = request.form.get("radius_km", "50").strip()
         config.radius_km = int(radius_val) if radius_val else 50
         config.relax_location_filter = (
@@ -786,6 +813,9 @@ def setup() -> str:
             config.news_sort_by = "popularity"
         config.enable_duckduckgo_search = (
             request.form.get("enable_duckduckgo_search", "yes") == "yes"
+        )
+        config.low_bandwidth_mode = (
+            request.form.get("low_bandwidth_mode", "no") == "yes"
         )
         config.enable_ai_suggestions = (
             request.form.get("enable_ai_suggestions", "yes") == "yes"
@@ -1007,16 +1037,10 @@ def api_source_preview() -> str:
     config.location_name = request.args.get("location_name", config.location_name or "").strip()
     zip_code = (request.args.get("zip_code") or "").strip()
     config.zip_code = zip_code or None
-    lat_raw = (request.args.get("latitude") or "").strip()
-    lon_raw = (request.args.get("longitude") or "").strip()
-    try:
-        config.latitude = float(lat_raw) if lat_raw else None
-    except ValueError:
-        config.latitude = None
-    try:
-        config.longitude = float(lon_raw) if lon_raw else None
-    except ValueError:
-        config.longitude = None
+    lat_raw = request.args.get("latitude") or ""
+    lon_raw = request.args.get("longitude") or ""
+    config.latitude = _parse_coordinate(lat_raw, -90.0, 90.0)
+    config.longitude = _parse_coordinate(lon_raw, -180.0, 180.0)
     return jsonify(_source_preview_payload(config))
 
 

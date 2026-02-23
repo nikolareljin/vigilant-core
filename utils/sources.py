@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import time
 from typing import Dict, List, Optional
 from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 
@@ -50,6 +51,13 @@ EXTREME_CONTEXT_KEYWORDS: Dict[str, tuple[str, ...]] = {
     "earthquake": ("earthquake", "quake", "seismic", "aftershock"),
     "conflict": ("war", "conflict", "missile", "drone strike", "invasion", "border clash"),
 }
+
+_DISCOVERY_HTML_CACHE_TTL_SECONDS = 30 * 60
+_FEED_VALIDATION_CACHE_TTL_SECONDS = 60 * 60
+_DISCOVERY_HTML_CACHE_MAX = 512
+_FEED_VALIDATION_CACHE_MAX = 1024
+_DISCOVERY_HTML_CACHE: dict[str, tuple[float, str]] = {}
+_FEED_VALIDATION_CACHE: dict[str, tuple[float, bool]] = {}
 
 
 REGION_PROFILES: Dict[str, RegionProfile] = {
@@ -984,6 +992,8 @@ def _infer_region_from_coords(
     if -35 <= lat <= -20 and 16 <= lon <= 33:
         return REGION_PROFILES["south_africa"]
 
+    # Sub-Saharan Africa broad box; keep a small overlap band (15-20N) for border cases,
+    # but North Africa precedence above handles the most relevant matches first.
     if -35 <= lat <= 20 and -20 <= lon <= 52:
         return REGION_PROFILES["sub_saharan_africa"]
 
@@ -993,6 +1003,8 @@ def _infer_region_from_coords(
     if -45 <= lat <= -9 and 110 <= lon <= 180:
         return REGION_PROFILES["australia"]
 
+    # South Asia / China / Southeast Asia intentionally overlap in border regions.
+    # The evaluation order below acts as precedence to keep routing stable and deterministic.
     if 5 <= lat <= 36 and 60 <= lon <= 98:
         return REGION_PROFILES["south_asia"]
 
@@ -1119,6 +1131,7 @@ def build_contextual_google_news_feeds(
     state_abbrev: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+    max_feeds: int = 24,
 ) -> List[str]:
     """Build on-demand Google News RSS feeds for likely emergency/infrastructure contexts."""
     feeds: List[str] = []
@@ -1247,6 +1260,8 @@ def build_contextual_google_news_feeds(
 
     for q in dict.fromkeys(q for q in queries if q):
         feeds.append(_google_news_rss(q, gl=region.gl, ceid=region.ceid, hl=region.hl))
+        if max_feeds > 0 and len(feeds) >= max_feeds:
+            break
     return feeds
 
 
@@ -1266,13 +1281,44 @@ def _normalize(url: str) -> str:
     return url.split("#", 1)[0]
 
 
-def discover_feed_links(base_url: str, client: httpx.Client) -> List[str]:
+def _prune_cache(cache: dict, max_items: int) -> None:
+    if len(cache) <= max_items:
+        return
+    overflow = len(cache) - max_items
+    for key in sorted(cache, key=lambda k: cache[k][0])[:overflow]:
+        cache.pop(key, None)
+
+
+def _get_cached_html(url: str) -> Optional[str]:
+    entry = _DISCOVERY_HTML_CACHE.get(url)
+    if not entry:
+        return None
+    ts, html = entry
+    if time.time() - ts > _DISCOVERY_HTML_CACHE_TTL_SECONDS:
+        _DISCOVERY_HTML_CACHE.pop(url, None)
+        return None
+    return html
+
+
+def _fetch_html_cached(base_url: str, client: httpx.Client) -> Optional[str]:
+    cached = _get_cached_html(base_url)
+    if cached is not None:
+        return cached
     try:
         resp = client.get(base_url, timeout=8.0)
         resp.raise_for_status()
     except Exception:
+        return None
+    _DISCOVERY_HTML_CACHE[base_url] = (time.time(), resp.text)
+    _prune_cache(_DISCOVERY_HTML_CACHE, _DISCOVERY_HTML_CACHE_MAX)
+    return resp.text
+
+
+def discover_feed_links(base_url: str, client: httpx.Client) -> List[str]:
+    html = _fetch_html_cached(base_url, client)
+    if html is None:
         return []
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     feeds: List[str] = []
     for link in soup.find_all("link"):
         rel = " ".join(link.get("rel", [])).lower()
@@ -1292,12 +1338,10 @@ def discover_feed_links(base_url: str, client: httpx.Client) -> List[str]:
 
 
 def discover_section_links(base_url: str, client: httpx.Client) -> List[str]:
-    try:
-        resp = client.get(base_url, timeout=8.0)
-        resp.raise_for_status()
-    except Exception:
+    html = _fetch_html_cached(base_url, client)
+    if html is None:
         return []
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     links: List[str] = []
     keywords = {"world", "news", "us", "local", "weather", "alerts", "breaking", "politics"}
     for anchor in soup.find_all("a"):
@@ -1314,13 +1358,22 @@ def discover_section_links(base_url: str, client: httpx.Client) -> List[str]:
 
 
 def _validate_feed(url: str, client: httpx.Client) -> bool:
+    cached = _FEED_VALIDATION_CACHE.get(url)
+    if cached:
+        ts, is_valid = cached
+        if time.time() - ts <= _FEED_VALIDATION_CACHE_TTL_SECONDS:
+            return is_valid
+        _FEED_VALIDATION_CACHE.pop(url, None)
     try:
         resp = client.get(url, timeout=8.0)
         resp.raise_for_status()
         text = resp.text.lower()
-        return "<rss" in text or "<feed" in text
+        is_valid = "<rss" in text or "<feed" in text
     except Exception:
-        return False
+        is_valid = False
+    _FEED_VALIDATION_CACHE[url] = (time.time(), is_valid)
+    _prune_cache(_FEED_VALIDATION_CACHE, _FEED_VALIDATION_CACHE_MAX)
+    return is_valid
 
 
 def _root_url(url: str) -> str:
@@ -1428,6 +1481,7 @@ def discover_local_source_feeds(
     location_name: str,
     zip_code: Optional[str] = None,
     max_feeds: int = 20,
+    low_bandwidth: bool = False,
 ) -> List[str]:
     location_hint = " ".join(part for part in [location_name, zip_code] if part)
     if not location_hint:
@@ -1454,14 +1508,21 @@ def discover_local_source_feeds(
         "public-safety/rss",
         "alerts/rss",
     )
+    query_limit = 4 if low_bandwidth else len(queries)
+    per_query_result_limit = 3 if low_bandwidth else 6
+    candidate_path_limit = 4 if low_bandwidth else len(candidate_paths)
     feeds: List[str] = []
+    scanned_bases: set[str] = set()
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
-        for query in queries:
-            for result_url in _search_duckduckgo_urls(query, client)[:6]:
+        for query in queries[:query_limit]:
+            for result_url in _search_duckduckgo_urls(query, client)[:per_query_result_limit]:
                 if len(feeds) >= max_feeds:
                     return feeds
                 root_url = _root_url(result_url)
                 for base_url in (result_url, root_url):
+                    if base_url in scanned_bases:
+                        continue
+                    scanned_bases.add(base_url)
                     for feed in discover_feed_links(base_url, client):
                         if feed in feeds:
                             continue
@@ -1469,7 +1530,7 @@ def discover_local_source_feeds(
                             feeds.append(feed)
                             if len(feeds) >= max_feeds:
                                 return feeds
-                for path in candidate_paths:
+                for path in candidate_paths[:candidate_path_limit]:
                     if len(feeds) >= max_feeds:
                         return feeds
                     candidate = f"{root_url.rstrip('/')}/{path}"
@@ -1778,6 +1839,7 @@ def discover_emergency_feeds(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     max_feeds: int = 20,
+    low_bandwidth: bool = False,
 ) -> List[str]:
     """Discover RSS feeds from local emergency services, utilities, and government."""
     feeds: List[str] = []
@@ -1800,6 +1862,7 @@ def discover_emergency_feeds(
         state_abbrev,
         latitude=latitude,
         longitude=longitude,
+        max_feeds=10 if low_bandwidth else 24,
     ):
         if feed not in feeds:
             feeds.append(feed)
@@ -1830,7 +1893,7 @@ def discover_emergency_feeds(
             targeted_queries.append(f"{state_name} power outage RSS")
             targeted_queries.append(f"{state_name} DOT traffic alerts RSS")
 
-    all_queries = emergency_queries[:6] + utility_queries[:4] + targeted_queries
+    all_queries = emergency_queries[: (3 if low_bandwidth else 6)] + utility_queries[: (2 if low_bandwidth else 4)] + targeted_queries[: (4 if low_bandwidth else len(targeted_queries))]
 
     candidate_paths = (
         "rss",
@@ -1850,13 +1913,20 @@ def discover_emergency_feeds(
         "traffic/rss",
         "transit/rss",
     )
+    source_scan_limit = 8 if low_bandwidth else 20
+    query_result_limit = 2 if low_bandwidth else 4
+    candidate_path_limit = 6 if low_bandwidth else len(candidate_paths)
 
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
+        scanned_bases: set[str] = set()
         # Try curated regional source URLs first (seamless path for lat/lon-only configurations)
-        for source in regional_signal_sources(location_name, zip_code, latitude, longitude):
+        for source in regional_signal_sources(location_name, zip_code, latitude, longitude)[:source_scan_limit]:
             if len(feeds) >= max_feeds:
                 break
             for base_url in (source.url, _root_url(source.url)):
+                if base_url in scanned_bases:
+                    continue
+                scanned_bases.add(base_url)
                 for feed in discover_feed_links(base_url, client):
                     if feed in feeds:
                         continue
@@ -1872,7 +1942,7 @@ def discover_emergency_feeds(
                 break
 
             # Search for potential sources
-            for result_url in _search_duckduckgo_urls(query, client)[:4]:
+            for result_url in _search_duckduckgo_urls(query, client)[:query_result_limit]:
                 if len(feeds) >= max_feeds:
                     break
 
@@ -1882,6 +1952,9 @@ def discover_emergency_feeds(
                 for base_url in (result_url, root_url):
                     if len(feeds) >= max_feeds:
                         break
+                    if base_url in scanned_bases:
+                        continue
+                    scanned_bases.add(base_url)
 
                     for feed in discover_feed_links(base_url, client):
                         if feed in feeds:
@@ -1892,7 +1965,7 @@ def discover_emergency_feeds(
                                 break
 
                 # Try common feed paths
-                for path in candidate_paths:
+                for path in candidate_paths[:candidate_path_limit]:
                     if len(feeds) >= max_feeds:
                         break
                     candidate = f"{root_url.rstrip('/')}/{path}"
@@ -1910,6 +1983,7 @@ def build_comprehensive_local_feeds(
     zip_code: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+    low_bandwidth: bool = False,
 ) -> List[str]:
     """Build a comprehensive list of feeds for a location including emergency services,
     weather, utilities, and local news.
@@ -1943,6 +2017,7 @@ def build_comprehensive_local_feeds(
         state_abbrev,
         latitude=latitude,
         longitude=longitude,
+        max_feeds=10 if low_bandwidth else 24,
     ):
         add_feed(feed)
 
@@ -1962,7 +2037,8 @@ def build_comprehensive_local_feeds(
             zip_code=zip_code,
             latitude=latitude,
             longitude=longitude,
-            max_feeds=20,
+            max_feeds=10 if low_bandwidth else 20,
+            low_bandwidth=low_bandwidth,
         )
         for feed in emergency_feeds:
             add_feed(feed)
@@ -1971,13 +2047,18 @@ def build_comprehensive_local_feeds(
 
     # 5. Local source feeds (police, fire, news)
     try:
-        local_feeds = discover_local_source_feeds(location_name, zip_code, max_feeds=10)
+        local_feeds = discover_local_source_feeds(
+            location_name,
+            zip_code,
+            max_feeds=5 if low_bandwidth else 10,
+            low_bandwidth=low_bandwidth,
+        )
         for feed in local_feeds:
             add_feed(feed)
     except Exception:
         pass  # Don't fail if local source discovery fails
 
-    return feeds
+    return feeds[:40] if low_bandwidth else feeds
 
 
 def search_emergency_info(
@@ -1987,6 +2068,7 @@ def search_emergency_info(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     max_results: int = 30,
+    low_bandwidth: bool = False,
 ) -> List[SearchResult]:
     """Search for emergency-related information for a subject at a location.
 
@@ -2064,11 +2146,13 @@ def search_emergency_info(
         )
 
     # Search with the queries
+    query_limit = 10 if low_bandwidth else 24
+    per_query_limit = 3 if low_bandwidth else 5
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
-        for query in list(dict.fromkeys(q for q in queries if q))[:24]:  # Limit queries
+        for query in list(dict.fromkeys(q for q in queries if q))[:query_limit]:
             if len(results) >= max_results:
                 break
-            for result in _search_duckduckgo_results(query, client)[:5]:
+            for result in _search_duckduckgo_results(query, client)[:per_query_limit]:
                 if result.url in seen_urls:
                     continue
                 seen_urls.add(result.url)

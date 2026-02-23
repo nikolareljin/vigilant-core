@@ -43,6 +43,14 @@ class SourceQueryTests(unittest.TestCase):
         self.assertIn("ukraine+conflict+escalation", text)
         self.assertIn("global+conflict+alerts", text)
 
+    def test_contextual_google_news_feeds_respects_max_feeds_limit(self) -> None:
+        feeds = build_contextual_google_news_feeds(
+            "power water gas renewables transport aviation fire flood tornado winter earthquake war conflict",
+            "Berlin",
+            max_feeds=5,
+        )
+        self.assertLessEqual(len(feeds), 5)
+
     def test_region_inference_uses_coordinates_without_location_text(self) -> None:
         region = infer_region_profile(latitude=48.8566, longitude=2.3522)  # Paris
         self.assertEqual(region.key, "europe")
@@ -83,6 +91,10 @@ class SourceQueryTests(unittest.TestCase):
         self.assertIn("https://mausam.imd.gov.in", sa_asia_urls)
         self.assertIn("https://www.bmkg.go.id", sea_urls)
         self.assertIn("https://www.kplc.co.ke", ssa_urls)
+
+    def test_region_overlap_precedence_keeps_north_africa_over_sub_saharan(self) -> None:
+        region = infer_region_profile(latitude=18.0, longitude=31.0)  # Sudan overlap band
+        self.assertEqual(region.key, "north_africa")
 
     def test_conflict_keyword_detection_avoids_substring_false_positives(self) -> None:
         self.assertNotIn("conflict", _subject_context_categories("hardware supply chain delays"))
