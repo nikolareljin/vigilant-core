@@ -17,6 +17,46 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
+function Get-ListeningPid {
+    param([int]$Port)
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($conn) { return [int]$conn.OwningProcess }
+    return $null
+}
+
+function Ensure-WebPortAvailable {
+    param([string]$Mode)
+    if ($Mode -notin @("web", "both")) { return }
+
+    $pid = Get-ListeningPid -Port 8765
+    if (-not $pid) { return }
+
+    Write-Host "Port 8765 is already in use. Attempting to stop an existing VigilantCore web instance..."
+    try { python vigilant.py stop *> $null } catch { }
+    Start-Sleep -Seconds 1
+
+    $pid = Get-ListeningPid -Port 8765
+    if (-not $pid) { return }
+
+    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    if ($proc -and $proc.ProcessName -match '^python') {
+        Write-Host "Stopping stale VigilantCore web listener (PID $pid)..."
+        try { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } catch { }
+        Start-Sleep -Seconds 1
+    }
+
+    $pid = Get-ListeningPid -Port 8765
+    if ($pid) {
+        Write-Host "Error: Port 8765 is still in use." -ForegroundColor Red
+        Write-Host "Stop the process using it, or run .\run.ps1 stop if it's a stale VigilantCore instance." -ForegroundColor Yellow
+        $owner = Get-Process -Id $pid -ErrorAction SilentlyContinue
+        if ($owner) {
+            Write-Host ("Listening process: {0} (PID {1})" -f $owner.ProcessName, $pid)
+        }
+        exit 1
+    }
+}
+
 # Create venv if needed
 if (-not (Test-Path "venv")) {
     Write-Host "Creating virtual environment..."
@@ -77,4 +117,5 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
 }
 
 # Run the launcher
+Ensure-WebPortAvailable -Mode $Command
 python vigilant.py $Command

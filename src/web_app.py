@@ -20,6 +20,7 @@ from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
 from utils.geo import detect_geo  # noqa: E402
 from utils.sources import ensure_seed_feeds  # noqa: E402
+from utils.timefmt import format_alert_timestamp  # noqa: E402
 
 
 DASHBOARD_TEMPLATE = """
@@ -763,6 +764,7 @@ def api_insight() -> str:
 
 @app.route("/api/alerts")
 def api_alerts() -> str:
+    config = get_config()
     page = int(request.args.get("page", "1"))
     limit = int(request.args.get("limit", "10"))
     if page < 1:
@@ -782,7 +784,7 @@ def api_alerts() -> str:
                 "impact_score": row["impact_score"],
                 "predictive_outcome": row["predictive_outcome"],
                 "is_relevant": bool(row["is_relevant"]),
-                "created_at": row["created_at"],
+                "created_at": format_alert_timestamp(row["created_at"], config.display_timezone),
             }
         )
     return jsonify({"alerts": alerts, "page": page, "limit": limit})

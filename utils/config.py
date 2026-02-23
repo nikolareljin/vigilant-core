@@ -10,8 +10,31 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except ImportError:  # pragma: no cover - Python <3.9 fallback
+    ZoneInfo = None  # type: ignore[assignment]
+    ZoneInfoNotFoundError = ValueError  # type: ignore[assignment]
 
 APP_NAME = "VigilantCore"
+
+
+def _load_display_timezone_from_env() -> Optional[str]:
+    """Read DISPLAY_TIMEZONE (preferred) or TIMEZONE (legacy fallback) and validate it."""
+    tz_name = os.getenv("DISPLAY_TIMEZONE") or os.getenv("TIMEZONE")
+    if not tz_name:
+        return None
+    if ZoneInfo is None:
+        return tz_name
+    try:
+        ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        print(
+            f"Warning: Invalid timezone '{tz_name}' in DISPLAY_TIMEZONE/TIMEZONE; falling back to host local time.",
+            file=sys.stderr,
+        )
+        return None
+    return tz_name
 
 
 @dataclass
@@ -33,6 +56,7 @@ class AppConfig:
     news_api_key: Optional[str] = None
     news_time_window_hours: int = 6
     news_sort_by: str = "popularity"
+    display_timezone: Optional[str] = None
     google_cse_api_key: Optional[str] = None
     google_cse_cx: Optional[str] = None
     bing_search_key: Optional[str] = None
@@ -76,6 +100,7 @@ def load_config() -> AppConfig:
         load_dotenv(env_path())
         cfg = AppConfig()
         cfg.news_api_key = os.getenv("NEWS_API_KEY")
+        cfg.display_timezone = _load_display_timezone_from_env()
         cfg.google_cse_api_key = os.getenv("GOOGLE_CSE_API_KEY")
         cfg.google_cse_cx = os.getenv("GOOGLE_CSE_CX")
         cfg.bing_search_key = os.getenv("BING_SEARCH_KEY")
@@ -106,6 +131,7 @@ def load_config() -> AppConfig:
         news_api_key=data.get("news_api_key"),
         news_time_window_hours=int(data.get("news_time_window_hours", 6)),
         news_sort_by=data.get("news_sort_by", "popularity"),
+        display_timezone=data.get("display_timezone"),
         google_cse_api_key=data.get("google_cse_api_key"),
         google_cse_cx=data.get("google_cse_cx"),
         bing_search_key=data.get("bing_search_key"),
@@ -115,6 +141,7 @@ def load_config() -> AppConfig:
         enable_duckduckgo_search=bool(data.get("enable_duckduckgo_search", True)),
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
+    cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
     cfg.google_cse_api_key = cfg.google_cse_api_key or os.getenv("GOOGLE_CSE_API_KEY")
     cfg.google_cse_cx = cfg.google_cse_cx or os.getenv("GOOGLE_CSE_CX")
     cfg.bing_search_key = cfg.bing_search_key or os.getenv("BING_SEARCH_KEY")
@@ -149,6 +176,7 @@ def save_config(config: AppConfig) -> None:
         "news_api_key": None,
         "news_time_window_hours": config.news_time_window_hours,
         "news_sort_by": config.news_sort_by,
+        "display_timezone": config.display_timezone,
         "google_cse_api_key": None,
         "google_cse_cx": None,
         "enable_duckduckgo_search": config.enable_duckduckgo_search,
@@ -157,6 +185,8 @@ def save_config(config: AppConfig) -> None:
     env_lines = []
     if config.news_api_key:
         env_lines.append(f"NEWS_API_KEY={config.news_api_key}")
+    if config.display_timezone:
+        env_lines.append(f"DISPLAY_TIMEZONE={config.display_timezone}")
     if config.google_cse_api_key:
         env_lines.append(f"GOOGLE_CSE_API_KEY={config.google_cse_api_key}")
     if config.google_cse_cx:
