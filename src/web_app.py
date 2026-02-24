@@ -19,7 +19,15 @@ from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
 from utils.geo import detect_geo  # noqa: E402
-from utils.sources import ensure_seed_feeds  # noqa: E402
+from utils.insight import (  # noqa: E402
+    normalize_suggestions as _normalize_suggestions,
+    normalize_suggestions_origin as _normalize_suggestions_origin,
+)
+from utils.sources import (  # noqa: E402
+    ensure_seed_feeds,
+    infer_region_profile,
+    regional_signal_source_urls,
+)
 from utils.timefmt import format_alert_timestamp  # noqa: E402
 
 
@@ -102,6 +110,47 @@ DASHBOARD_TEMPLATE = """
       line-height: 1.6;
     }
     .insight-card.expanded .insight-explanation { display: block; }
+    .insight-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .insight-left { min-width: 0; }
+    .insight-suggestions-panel {
+      display: none;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .insight-suggestions-panel.visible { display: block; }
+    .insight-suggestions-title {
+      font-size: 0.85em;
+      font-weight: 700;
+      margin-bottom: 8px;
+      opacity: 0.95;
+    }
+    .insight-suggestions-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 0.9em;
+      line-height: 1.4;
+    }
+    .insight-suggestions-list li + li { margin-top: 6px; }
+    .insight-suggestions-note {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      font-size: 0.78em;
+      line-height: 1.35;
+      color: #fff1b3;
+    }
+    .insight-suggestions-note.visible { display: block; }
+    @media (max-width: 900px) {
+      .insight-layout { grid-template-columns: 1fr; }
+    }
     .insight-sources {
       margin-top: 12px;
       font-size: 0.85em;
@@ -139,8 +188,17 @@ DASHBOARD_TEMPLATE = """
   <!-- Monitoring Question Insight Card -->
   <div id="insightCard" class="insight-card">
     <div class="insight-question" id="insightQuestion"></div>
-    <div class="insight-summary" id="insightSummary" onclick="toggleInsight()"></div>
-    <div class="insight-explanation" id="insightExplanation"></div>
+    <div class="insight-layout">
+      <div class="insight-left">
+        <div class="insight-summary" id="insightSummary" onclick="toggleInsight()"></div>
+        <div class="insight-explanation" id="insightExplanation"></div>
+      </div>
+      <div class="insight-suggestions-panel" id="insightSuggestionsPanel">
+        <div class="insight-suggestions-title">Suggested actions</div>
+        <ul class="insight-suggestions-list" id="insightSuggestionsList"></ul>
+        <div class="insight-suggestions-note" id="insightSuggestionsNote"></div>
+      </div>
+    </div>
     <div class="insight-sources" id="insightSources"></div>
     <div class="insight-timestamp" id="insightTimestamp"></div>
   </div>
@@ -204,6 +262,34 @@ async function loadInsight() {
     document.getElementById('insightQuestion').textContent = data.question;
     document.getElementById('insightSummary').textContent = data.summary;
     document.getElementById('insightExplanation').textContent = data.explanation || '';
+    const suggestionsPanel = document.getElementById('insightSuggestionsPanel');
+    const suggestionsList = document.getElementById('insightSuggestionsList');
+    const suggestionsNote = document.getElementById('insightSuggestionsNote');
+    const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+    const suggestionsOrigin = typeof data.suggestions_origin === 'string' ? data.suggestions_origin : 'none';
+    if (suggestions.length > 0) {
+      suggestionsList.innerHTML = '';
+      suggestions.slice(0, 5).forEach((item) => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        suggestionsList.appendChild(li);
+      });
+      if (suggestionsOrigin === 'ai_assisted' || suggestionsOrigin === 'mixed') {
+        suggestionsNote.textContent = suggestionsOrigin === 'mixed'
+          ? 'Caution: Some suggested actions are AI-assisted gap-filling beyond official guidance and may contain errors.'
+          : 'Caution: Suggested actions are AI-assisted (generated to fill gaps beyond official guidance) and may contain errors.';
+        suggestionsNote.classList.add('visible');
+      } else {
+        suggestionsNote.textContent = '';
+        suggestionsNote.classList.remove('visible');
+      }
+      suggestionsPanel.classList.add('visible');
+    } else {
+      suggestionsList.innerHTML = '';
+      suggestionsNote.textContent = '';
+      suggestionsNote.classList.remove('visible');
+      suggestionsPanel.classList.remove('visible');
+    }
 
     // Show sources if available
     const sourcesDiv = document.getElementById('insightSources');
@@ -331,6 +417,12 @@ SETUP_TEMPLATE = """
     .row { display: flex; gap: 12px; }
     .row > div { flex: 1; }
     .row label { margin-top: 0; }
+    .preview-card { margin-top: 14px; background: #f6f8ff; border: 1px solid #dfe5ff; border-radius: 8px; padding: 12px; }
+    .preview-title { font-weight: 700; color: #22306a; margin-bottom: 6px; }
+    .preview-meta { font-size: 0.9em; color: #4b5563; margin-bottom: 8px; }
+    .preview-list { margin: 0; padding-left: 18px; max-height: 180px; overflow: auto; }
+    .preview-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+    .preview-btn { margin-top: 0; background: #5f6b7a; }
   </style>
 </head>
 <body>
@@ -379,6 +471,18 @@ SETUP_TEMPLATE = """
         </div>
       </div>
 
+      <div class="preview-card">
+        <div class="preview-title">Regional Source Preview</div>
+        <div class="preview-meta" id="sourcePreviewMeta">Preview inferred region and curated source URLs for the current location / coordinates.</div>
+        <ul class="preview-list" id="sourcePreviewList">
+          <li>Loading preview…</li>
+        </ul>
+        <div class="preview-actions">
+          <button type="button" class="preview-btn" id="refreshSourcePreviewBtn">Refresh Preview</button>
+          <span class="help">Uses location name, ZIP, and latitude/longitude (lat/lon works even without location text).</span>
+        </div>
+      </div>
+
       <label>Relax location filter</label>
       <select name="relax_location_filter">
         <option value="no" {% if not config.relax_location_filter %}selected{% endif %}>No (default - strict matching)</option>
@@ -407,6 +511,12 @@ SETUP_TEMPLATE = """
         <option value="30" {% if insight_mins == 30 %}selected{% endif %}>Every 30 minutes</option>
       </select>
       <div class="help">How often to regenerate the AI insight for your monitoring question.</div>
+
+      <label>Show AI suggested actions</label>
+      <select name="enable_ai_suggestions">
+        <option value="yes" {% if config.enable_ai_suggestions %}selected{% endif %}>Yes (show actionable suggestions next to the result)</option>
+        <option value="no" {% if not config.enable_ai_suggestions %}selected{% endif %}>No</option>
+      </select>
     </div>
 
     <!-- TIMING -->
@@ -468,6 +578,12 @@ SETUP_TEMPLATE = """
         <option value="yes" {% if config.enable_duckduckgo_search %}selected{% endif %}>Yes (default, no API key required)</option>
         <option value="no" {% if not config.enable_duckduckgo_search %}selected{% endif %}>No</option>
       </select>
+
+      <label>Optimize for tethered / low-bandwidth connection</label>
+      <select name="low_bandwidth_mode">
+        <option value="no" {% if not config.low_bandwidth_mode %}selected{% endif %}>No (standard discovery)</option>
+        <option value="yes" {% if config.low_bandwidth_mode %}selected{% endif %}>Yes (fewer requests, smaller feed/query budgets)</option>
+      </select>
     </div>
 
     <!-- DATA SOURCES - NEWS API -->
@@ -501,6 +617,66 @@ SETUP_TEMPLATE = """
 
     <button type="submit">Save & Start Monitoring</button>
   </form>
+  <script>
+    function sourcePreviewParams() {
+      const form = document.querySelector('form');
+      const get = (name) => (form.querySelector(`[name="${name}"]`)?.value || '').trim();
+      const params = new URLSearchParams();
+      const subject = get('subject');
+      const locationName = get('location_name');
+      const zipCode = get('zip_code');
+      const latitude = get('latitude');
+      const longitude = get('longitude');
+      if (subject) params.set('subject', subject);
+      if (locationName) params.set('location_name', locationName);
+      if (zipCode) params.set('zip_code', zipCode);
+      if (latitude) params.set('latitude', latitude);
+      if (longitude) params.set('longitude', longitude);
+      return params;
+    }
+
+    async function loadSourcePreview() {
+      const meta = document.getElementById('sourcePreviewMeta');
+      const list = document.getElementById('sourcePreviewList');
+      meta.textContent = 'Loading preview...';
+      list.innerHTML = '<li>Loading preview…</li>';
+      try {
+        const params = sourcePreviewParams();
+        const res = await fetch('/api/source-preview?' + params.toString());
+        const data = await res.json();
+        meta.textContent = `Inferred region: ${data.region_label} (${data.region_key}) | ${data.source_count} curated URLs`;
+        if (!data.urls || data.urls.length === 0) {
+          list.innerHTML = '<li>No curated regional URLs available for this location yet.</li>';
+          return;
+        }
+        list.innerHTML = '';
+        data.urls.slice(0, 25).forEach((url) => {
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.href = String(url);
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = String(url);
+          li.appendChild(a);
+          list.appendChild(li);
+        });
+      } catch (err) {
+        meta.textContent = 'Failed to load preview.';
+        list.innerHTML = '<li>Could not fetch source preview.</li>';
+      }
+    }
+
+    const previewFields = ['subject', 'location_name', 'zip_code', 'latitude', 'longitude'];
+    for (const name of previewFields) {
+      const el = document.querySelector(`[name="${name}"]`);
+      if (el) {
+        el.addEventListener('change', loadSourcePreview);
+        el.addEventListener('blur', loadSourcePreview);
+      }
+    }
+    document.getElementById('refreshSourcePreviewBtn').addEventListener('click', loadSourcePreview);
+    loadSourcePreview();
+  </script>
 </body>
 </html>
 """
@@ -548,6 +724,42 @@ def get_config() -> AppConfig:
     return config
 
 
+def _source_preview_payload(config: AppConfig) -> dict:
+    region = infer_region_profile(
+        location_name=config.location_name or "",
+        zip_code=config.zip_code,
+        latitude=config.latitude,
+        longitude=config.longitude,
+    )
+    urls = regional_signal_source_urls(
+        location_name=config.location_name or "",
+        zip_code=config.zip_code,
+        latitude=config.latitude,
+        longitude=config.longitude,
+    )
+    return {
+        "region_key": region.key,
+        "region_label": region.label,
+        "location_name": config.location_name or "",
+        "zip_code": config.zip_code,
+        "latitude": config.latitude,
+        "longitude": config.longitude,
+        "source_count": len(urls),
+        "urls": urls,
+    }
+
+
+def _parse_coordinate(raw: str, minimum: float, maximum: float) -> Optional[float]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return value if minimum <= value <= maximum else None
+
+
 @app.route("/favicon.ico")
 def favicon():
     return send_from_directory(
@@ -573,10 +785,10 @@ def setup() -> str:
         config.question = request.form.get("question", "").strip()
         config.prefer_light_model = request.form.get("prefer_light_model", "yes") == "yes"
         config.zip_code = request.form.get("zip_code") or None
-        lat_val = request.form.get("latitude", "").strip()
-        lon_val = request.form.get("longitude", "").strip()
-        config.latitude = float(lat_val) if lat_val else None
-        config.longitude = float(lon_val) if lon_val else None
+        lat_val = request.form.get("latitude", "")
+        lon_val = request.form.get("longitude", "")
+        config.latitude = _parse_coordinate(lat_val, -90.0, 90.0)
+        config.longitude = _parse_coordinate(lon_val, -180.0, 180.0)
         radius_val = request.form.get("radius_km", "50").strip()
         config.radius_km = int(radius_val) if radius_val else 50
         config.relax_location_filter = (
@@ -601,6 +813,12 @@ def setup() -> str:
             config.news_sort_by = "popularity"
         config.enable_duckduckgo_search = (
             request.form.get("enable_duckduckgo_search", "yes") == "yes"
+        )
+        config.low_bandwidth_mode = (
+            request.form.get("low_bandwidth_mode", "no") == "yes"
+        )
+        config.enable_ai_suggestions = (
+            request.form.get("enable_ai_suggestions", "yes") == "yes"
         )
         insight_mins_val = request.form.get("insight_refresh_minutes", "5").strip()
         try:
@@ -660,6 +878,8 @@ def api_insight() -> str:
             "question": config.question,
             "summary": "No relevant data available.",
             "explanation": "No alerts have been collected yet. Check back after the monitoring system gathers data.",
+            "suggestions": [] if config.enable_ai_suggestions else [],
+            "suggestions_origin": "none",
             "sources_used": [],
         })
 
@@ -714,14 +934,31 @@ def api_insight() -> str:
             f"If asked about probability or likelihood, provide a percentage estimate with brief reasoning."
         )
 
-        user_prompt = (
-            f"MONITORING QUESTION: {config.question}\n\n"
-            f"RECENT ALERTS AND NEWS:\n{context}\n\n"
-            f"Provide your response as JSON with these keys:\n"
-            f'- "summary": A 1-2 sentence direct answer (include probability % if asked about likelihood)\n'
-            f'- "explanation": A 2-4 sentence detailed explanation of how you reached this conclusion, citing specific sources\n'
-            f"Respond with ONLY valid JSON, no other text."
-        )
+        prompt_lines = [
+            f"MONITORING QUESTION: {config.question}",
+            "",
+            "RECENT ALERTS AND NEWS:",
+            context,
+            "",
+            "Provide your response as JSON with these keys:",
+            '- "summary": A 1-2 sentence direct answer (include probability % if asked about likelihood)',
+            '- "explanation": A 2-4 sentence detailed explanation of how you reached this conclusion, citing specific sources',
+        ]
+        if config.enable_ai_suggestions:
+            prompt_lines.append(
+                '- "suggestions": 2-5 short actionable suggestions for what the user should do and how to react in this specific situation (safety-first, context-aware, concise)'
+            )
+            prompt_lines.append(
+                '- "suggestions_origin": one of "official_paraphrase", "ai_assisted", or "mixed"'
+            )
+            prompt_lines.append(
+                'Suggestion policy: first summarize/paraphrase official guidance (authorities, utilities, emergency services, transport agencies) when available. '
+                'Only fill gaps with your own suggested actions when official guidance is missing or incomplete. '
+                'Use "official_paraphrase" if suggestions only paraphrase officials; use "ai_assisted" if suggestions are your own gap-filling guidance; '
+                'use "mixed" if both are present.'
+            )
+        prompt_lines.append("Respond with ONLY valid JSON, no other text.")
+        user_prompt = "\n".join(prompt_lines)
 
         response = client.chat(
             model=model,
@@ -746,11 +983,14 @@ def api_insight() -> str:
             # Fallback: treat entire response as summary
             payload = {"summary": content[:300], "explanation": content}
 
+        suggestions = _normalize_suggestions(payload.get("suggestions")) if config.enable_ai_suggestions else []
         return jsonify({
             "has_question": True,
             "question": config.question,
             "summary": payload.get("summary", "Unable to generate summary."),
             "explanation": payload.get("explanation", ""),
+            "suggestions": suggestions,
+            "suggestions_origin": _normalize_suggestions_origin(payload.get("suggestions_origin"), suggestions),
             "sources_used": list(sources_used)[:10],
         })
 
@@ -788,6 +1028,20 @@ def api_alerts() -> str:
             }
         )
     return jsonify({"alerts": alerts, "page": page, "limit": limit})
+
+
+@app.route("/api/source-preview")
+def api_source_preview() -> str:
+    config = get_config()
+    config.subject = request.args.get("subject", config.subject or "Impactful Events").strip() or "Impactful Events"
+    config.location_name = request.args.get("location_name", config.location_name or "").strip()
+    zip_code = (request.args.get("zip_code") or "").strip()
+    config.zip_code = zip_code or None
+    lat_raw = request.args.get("latitude") or ""
+    lon_raw = request.args.get("longitude") or ""
+    config.latitude = _parse_coordinate(lat_raw, -90.0, 90.0)
+    config.longitude = _parse_coordinate(lon_raw, -180.0, 180.0)
+    return jsonify(_source_preview_payload(config))
 
 
 @app.route("/data")

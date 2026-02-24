@@ -27,6 +27,7 @@ The Monitoring Question feature provides AI-generated summaries based on your sp
 **Insight Display:**
 - **Summary**: A brief answer to your monitoring question
 - **Explanation**: Detailed analysis with supporting evidence from recent alerts
+- **Suggested actions**: Optional, visible recommendations for what to do/how to react in the current context (can be toggled in settings)
 
 ### Location-Aware Filtering
 
@@ -56,11 +57,50 @@ When you provide a ZIP code or coordinates, VigilantCore automatically discovers
 - Power company outage maps and alerts
 - Electric utility service notifications
 - Gas and water utility alerts
+- Power outage aggregator lookups (including `poweroutage.us` search coverage)
+- Renewable energy infrastructure incidents (solar/wind) when relevant
 
 **Local News:**
 - County and city government news
 - Local TV station news feeds
 - Regional newspaper RSS feeds
+
+**Transportation & Operations:**
+- Traffic incidents and road closures
+- Transit and rail disruption alerts
+- Airport operations alerts and airline delay/cancellation signals
+
+**Extreme Situations (Context-Aware):**
+- Flooding / flash flood warnings
+- Tornado and severe storm warnings
+- Wildfire / evacuation alerts
+- Winter storm / ice disruption signals
+- Earthquake / seismic incident signals
+- Conflict / war / humanitarian crisis updates (subject-driven global monitoring)
+
+### International Region Coverage
+
+When location text or coordinates are provided, VigilantCore can infer a region and prioritize matching sources and localized Google News feeds. Current curated regional URL coverage includes:
+
+- Canada
+- Europe (priority international baseline)
+- North Africa
+- China / Far East
+- Australia
+- South Africa
+- Central America
+- South America
+- Additional fallback regions where sources are available: Middle East, South Asia, Southeast Asia, Sub-Saharan Africa, and global disaster/humanitarian sources
+
+### Source Preview (Web Setup)
+
+The setup page includes a regional source preview panel that:
+- Infers the region from location text / ZIP / latitude-longitude
+- Shows curated source URLs that will be prioritized for discovery
+- Works before saving settings
+- Validates latitude/longitude ranges before preview inference
+
+You can also query the same data programmatically via `GET /api/source-preview`.
 
 This discovery happens automatically based on your ZIP code - the app maps your ZIP to the correct state and searches for relevant local sources.
 
@@ -82,6 +122,7 @@ Without any API keys, VigilantCore provides:
 2. **Google News RSS** - Auto-generated queries for your subject
 3. **Reddit Search RSS** - Social media monitoring
 4. **Local Discovery** - Attempts to find local news and government RSS feeds
+5. **Contextual Emergency Search** - Subject-aware outage/disaster/transport/conflict searches when location and context are provided
 
 ### Optional API Integrations
 
@@ -93,6 +134,16 @@ Enhance coverage with API keys:
 | NewsAPI | Yes | 150,000+ news sources |
 | Google CSE | Yes | Custom web search |
 | Bing Search | Yes | Microsoft web search |
+
+### Low-Bandwidth / Tethered Optimization
+
+For tethered or constrained connections, enable the low-bandwidth optimization setting in web or Qt setup.
+
+Effects:
+- smaller contextual feed/query budgets
+- fewer feed-discovery requests per source/query
+- capped RSS polling feed list size
+- cached feed discovery/validation lookups to reduce repeated network pulls
 
 ### Custom RSS Feeds
 

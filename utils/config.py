@@ -64,6 +64,8 @@ class AppConfig:
     bing_search_market: Optional[str] = None
     bing_search_safe: Optional[str] = None
     enable_duckduckgo_search: bool = True
+    enable_ai_suggestions: bool = True
+    low_bandwidth_mode: bool = False
 
 
 def config_dir() -> Path:
@@ -110,6 +112,12 @@ def load_config() -> AppConfig:
         cfg.enable_duckduckgo_search = bool(
             (os.getenv("ENABLE_DUCKDUCKGO_SEARCH") or "true").lower() in ("1", "true", "yes")
         )
+        cfg.enable_ai_suggestions = bool(
+            (os.getenv("ENABLE_AI_SUGGESTIONS") or "true").lower() in ("1", "true", "yes")
+        )
+        cfg.low_bandwidth_mode = bool(
+            (os.getenv("LOW_BANDWIDTH_MODE") or "false").lower() in ("1", "true", "yes")
+        )
         return cfg
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
     load_dotenv(env_path())
@@ -139,6 +147,8 @@ def load_config() -> AppConfig:
         bing_search_market=data.get("bing_search_market"),
         bing_search_safe=data.get("bing_search_safe"),
         enable_duckduckgo_search=bool(data.get("enable_duckduckgo_search", True)),
+        enable_ai_suggestions=bool(data.get("enable_ai_suggestions", True)),
+        low_bandwidth_mode=bool(data.get("low_bandwidth_mode", False)),
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
     cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
@@ -151,6 +161,14 @@ def load_config() -> AppConfig:
     if os.getenv("ENABLE_DUCKDUCKGO_SEARCH") is not None:
         cfg.enable_duckduckgo_search = (
             os.getenv("ENABLE_DUCKDUCKGO_SEARCH", "").lower() in ("1", "true", "yes")
+        )
+    if os.getenv("ENABLE_AI_SUGGESTIONS") is not None:
+        cfg.enable_ai_suggestions = (
+            os.getenv("ENABLE_AI_SUGGESTIONS", "").lower() in ("1", "true", "yes")
+        )
+    if os.getenv("LOW_BANDWIDTH_MODE") is not None:
+        cfg.low_bandwidth_mode = (
+            os.getenv("LOW_BANDWIDTH_MODE", "").lower() in ("1", "true", "yes")
         )
     return cfg
 
@@ -180,6 +198,8 @@ def save_config(config: AppConfig) -> None:
         "google_cse_api_key": None,
         "google_cse_cx": None,
         "enable_duckduckgo_search": config.enable_duckduckgo_search,
+        "enable_ai_suggestions": config.enable_ai_suggestions,
+        "low_bandwidth_mode": config.low_bandwidth_mode,
     }
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
     env_lines = []
@@ -191,5 +211,36 @@ def save_config(config: AppConfig) -> None:
         env_lines.append(f"GOOGLE_CSE_API_KEY={config.google_cse_api_key}")
     if config.google_cse_cx:
         env_lines.append(f"GOOGLE_CSE_CX={config.google_cse_cx}")
-    if env_lines:
-        env_path().write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+    if not config.enable_ai_suggestions:
+        env_lines.append("ENABLE_AI_SUGGESTIONS=false")
+    if not config.enable_duckduckgo_search:
+        env_lines.append("ENABLE_DUCKDUCKGO_SEARCH=false")
+    if config.low_bandwidth_mode:
+        env_lines.append("LOW_BANDWIDTH_MODE=true")
+    dot_env = env_path()
+    managed_keys = {
+        "NEWS_API_KEY",
+        "DISPLAY_TIMEZONE",
+        "GOOGLE_CSE_API_KEY",
+        "GOOGLE_CSE_CX",
+        "ENABLE_AI_SUGGESTIONS",
+        "ENABLE_DUCKDUCKGO_SEARCH",
+        "LOW_BANDWIDTH_MODE",
+    }
+    preserved_lines: list[str] = []
+    if dot_env.exists():
+        for line in dot_env.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in line:
+                preserved_lines.append(line)
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key in managed_keys:
+                continue
+            preserved_lines.append(line)
+
+    merged_lines = preserved_lines + env_lines
+    if merged_lines:
+        dot_env.write_text("\n".join(merged_lines) + "\n", encoding="utf-8")
+    elif dot_env.exists():
+        dot_env.unlink()

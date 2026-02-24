@@ -44,9 +44,16 @@ cd vigilant-core
 - **Automatic Local Discovery**: When you provide a ZIP code, automatically finds:
   - NWS weather alerts for your state
   - Local police, fire, and emergency management alerts
-  - Power company outage maps and utility alerts
+  - Power outage maps (including `poweroutage.us` search coverage) and utility alerts
+  - Water, gas, solar, and wind infrastructure incident signals
+  - Transportation/traffic/transit/airport and airline disruption signals
   - Local news and government sources
-- **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, and 30+ curated sources
+- **Context-Aware Extreme Event Coverage**: Flooding, tornadoes, wildfires, winter storms, earthquakes, industrial incidents, and conflict/crisis monitoring queries
+- **International Regional Coverage**: Canada, Europe (priority), North Africa, China/Far East, Australia, South Africa, Central America, South America, plus broader Middle East/South Asia/Southeast Asia/Sub-Saharan Africa/global fallback
+- **Coordinate-First Source Discovery**: Latitude/longitude alone can infer region and automatically seed relevant regional source URLs and localized Google News feeds
+- **Source Preview UI/API**: Setup page preview and `/api/source-preview` endpoint show the inferred region and curated source URLs before saving
+- **AI Suggested Actions Toggle**: Enable/disable actionable suggestions shown next to the AI insight result from settings
+- **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama
 
@@ -85,10 +92,74 @@ When you provide a ZIP code or coordinates, VigilantCore automatically discovers
 **Utilities:**
 - Power company outage information
 - Electric utility service alerts
+- Water utility advisories and boil-water alerts
+- Gas utility emergencies and leak notices
+- Renewable energy infrastructure incidents (solar/wind) when relevant
 
 **Local News:**
 - County/city government news feeds
 - Local newspaper RSS feeds
+
+**Transportation & Critical Infrastructure:**
+- Traffic and DOT incident updates
+- Transit/rail service disruption alerts
+- Airport/airline delay and cancellation signals
+
+**Global Crisis / Conflict (subject-driven):**
+- If your subject mentions war/conflict/crisis terms, VigilantCore expands search/feed queries for international conflict and humanitarian risk updates
+
+**International Regions (location/lat-lon aware):**
+- Regional source URLs and searches are automatically prioritized for Canada, Europe, North Africa, China/Far East, Australia, South Africa, Central America, and South America
+- Additional fallback coverage includes Middle East, South Asia, Southeast Asia, and Sub-Saharan Africa where public sources are available
+
+## Regional Source Discovery (Detailed)
+
+VigilantCore now uses a layered source-discovery approach for outage/extreme-event monitoring:
+
+1. **Infer region** from ZIP code, location text, or latitude/longitude (lat/lon works by itself).
+2. **Select curated regional URLs** (utilities, emergency agencies, weather services, transport/aviation operations, and major regional news).
+3. **Generate localized Google News RSS feeds** using region-specific locale settings (`gl`, `hl`, `ceid`).
+4. **Expand context-aware searches** for utilities, transportation, disasters, and conflict/humanitarian crises.
+5. **Discover RSS feeds** from candidate sites and merge with user-provided feeds and other search/API sources.
+
+This improves coverage in places where direct RSS feeds are inconsistent or unavailable.
+
+### Coordinate-First Behavior
+
+If you provide only coordinates:
+
+- `latitude`
+- `longitude`
+
+VigilantCore can still:
+
+- infer an approximate region
+- select localized regional source URLs
+- generate localized Google News feeds
+- preview the selected region/sources before saving
+
+### Source Preview (Web Setup + API)
+
+The setup page includes a **Regional Source Preview** panel that shows:
+
+- inferred region key/label
+- curated source URL count
+- curated source URLs that will be prioritized
+- coordinate values are range-validated before region inference (`lat=-90..90`, `lon=-180..180`)
+
+Programmatic preview:
+
+```bash
+curl "http://127.0.0.1:8765/api/source-preview?latitude=48.8566&longitude=2.3522"
+```
+
+Another example:
+
+```bash
+curl "http://127.0.0.1:8765/api/source-preview?location_name=Toronto,%20Ontario,%20Canada"
+```
+
+See `docs/source-discovery.md` for the full coverage list and implementation behavior.
 
 For example, ZIP code `08544` (Princeton, NJ) automatically adds NWS New Jersey alerts, searches for PSE&G outage info, and finds Mercer County emergency resources.
 
@@ -329,6 +400,13 @@ BING_SEARCH_SAFE=Moderate
 DuckDuckGo HTML search is available without an API key. Enable/disable it in Settings:
 - Web UI: **Enable DuckDuckGo web search**
 - Qt UI: **Enable DuckDuckGo web search**
+
+### Tethered / Low-Bandwidth Mode
+If you are on a mobile hotspot or tethered connection, enable:
+- Web UI: **Optimize for tethered / low-bandwidth connection**
+- Qt UI: **Optimize for tethered / low-bandwidth connection**
+
+This mode reduces request volume by limiting source discovery/query budgets and capping feed polling/discovery breadth.
 
 ### Facebook & Instagram (Meta Graph API)
 Meta does not provide a general public search API. Access typically requires:

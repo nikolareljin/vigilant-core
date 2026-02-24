@@ -80,6 +80,9 @@ class MonitorEngine:
             parts.append(f"within {self.config.radius_km}km")
         return " | ".join(p for p in parts if p)
 
+    def _is_low_bandwidth(self) -> bool:
+        return bool(getattr(self.config, "low_bandwidth_mode", False))
+
     def _feed_cache_path(self) -> Path:
         base = config_dir()
         base.mkdir(parents=True, exist_ok=True)
@@ -175,13 +178,17 @@ class MonitorEngine:
     def _get_local_source_feeds(self) -> List[str]:
         if self._local_source_feeds is None:
             # Use comprehensive local feeds when location info is available
-            if self.config.zip_code or (self.config.latitude and self.config.longitude):
+            has_coords = (
+                self.config.latitude is not None and self.config.longitude is not None
+            )
+            if self.config.zip_code or has_coords:
                 self._local_source_feeds = build_comprehensive_local_feeds(
                     subject=self.config.subject,
                     location_name=self.config.location_name,
                     zip_code=self.config.zip_code,
                     latitude=self.config.latitude,
                     longitude=self.config.longitude,
+                    low_bandwidth=self._is_low_bandwidth(),
                 )
                 logger.info(
                     "Discovered %d comprehensive local feeds for %s",
@@ -190,7 +197,10 @@ class MonitorEngine:
                 )
             else:
                 self._local_source_feeds = discover_local_source_feeds(
-                    self.config.location_name, self.config.zip_code
+                    self.config.location_name,
+                    self.config.zip_code,
+                    max_feeds=5 if self._is_low_bandwidth() else 20,
+                    low_bandwidth=self._is_low_bandwidth(),
                 )
         return self._local_source_feeds
 
@@ -270,8 +280,10 @@ class MonitorEngine:
     async def fetch_rss_items(self, feed_urls: Optional[List[str]] = None) -> List[AlertItem]:
         items: List[AlertItem] = []
         feed_urls = feed_urls or ensure_seed_feeds(self.config.rss_feeds)
+        if self._is_low_bandwidth() and len(feed_urls) > 40:
+            feed_urls = feed_urls[:40]
         bad_feeds: List[str] = []
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=12 if self._is_low_bandwidth() else 20) as client:
             for feed_url in feed_urls:
                 try:
                     resp = await client.get(feed_url)
@@ -485,7 +497,7 @@ class MonitorEngine:
         if not query:
             return []
         items: List[AlertItem] = []
-        for result in search_duckduckgo_results(query, max_results=20):
+        for result in search_duckduckgo_results(query, max_results=8 if self._is_low_bandwidth() else 20):
             items.append(
                 AlertItem(
                     url=result.url,
@@ -512,7 +524,8 @@ class MonitorEngine:
                 zip_code=self.config.zip_code,
                 latitude=self.config.latitude,
                 longitude=self.config.longitude,
-                max_results=20,
+                max_results=10 if self._is_low_bandwidth() else 20,
+                low_bandwidth=self._is_low_bandwidth(),
             )
             for result in results:
                 items.append(
@@ -577,7 +590,12 @@ class MonitorEngine:
                         feed_urls.append(feed)
             location_active = bool(self.config.location_name or self.config.zip_code)
             local_signal_feeds: List[str] = []
-            local_feeds = build_local_feeds(self.config.location_name, self.config.zip_code)
+            local_feeds = build_local_feeds(
+                self.config.location_name,
+                self.config.zip_code,
+                self.config.latitude,
+                self.config.longitude,
+            )
             if local_feeds:
                 for feed in local_feeds:
                     if feed not in feed_urls:
@@ -601,8 +619,11 @@ class MonitorEngine:
                 feed_urls = feed_urls + [google_news_feed]
             if google_news_feed and google_news_feed not in local_signal_feeds:
                 local_signal_feeds.append(google_news_feed)
+            if self._is_low_bandwidth() and len(feed_urls) > 60:
+                feed_urls = feed_urls[:60]
             if location_active and not local_signal_feeds and not self.config.use_only_rss_feeds:
-                for feed in build_all_feeds():
+                fallback_max = 60 if self._is_low_bandwidth() else 400
+                for feed in build_all_feeds(max_feeds=fallback_max):
                     if feed not in feed_urls:
                         feed_urls.append(feed)
             feed_urls = await self._filter_valid_feeds(feed_urls)

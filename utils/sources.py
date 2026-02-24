@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
+import threading
+import time
 from typing import Dict, List, Optional
 from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
 
@@ -21,6 +24,364 @@ class SearchResult:
     title: str
     url: str
     snippet: str
+
+
+@dataclass(frozen=True)
+class RegionProfile:
+    key: str
+    label: str
+    gl: str
+    ceid: str
+    hl: str
+    utility_terms: tuple[str, ...] = ()
+    transport_terms: tuple[str, ...] = ()
+    emergency_terms: tuple[str, ...] = ()
+
+
+EXTREME_CONTEXT_KEYWORDS: Dict[str, tuple[str, ...]] = {
+    "power": ("outage", "power", "electric", "grid", "blackout", "substation"),
+    "water": ("water", "main break", "boil advisory", "wastewater", "sewer"),
+    "gas": ("gas", "pipeline", "natural gas", "leak"),
+    "renewables": ("solar", "wind", "renewable", "battery storage"),
+    "transport": ("transport", "traffic", "road", "highway", "transit", "rail", "bridge"),
+    "aviation": ("airport", "airline", "flight", "faa", "ground stop", "runway"),
+    "fire": ("fire", "wildfire", "brush fire", "structure fire", "evacuation"),
+    "flood": ("flood", "flooding", "flash flood", "river crest"),
+    "tornado": ("tornado", "twister", "severe storm", "supercell"),
+    "winter": ("snow", "ice", "blizzard", "winter storm", "freeze"),
+    "earthquake": ("earthquake", "quake", "seismic", "aftershock"),
+    "conflict": ("war", "conflict", "missile", "drone strike", "invasion", "border clash"),
+}
+
+_DISCOVERY_HTML_CACHE_TTL_SECONDS = 30 * 60
+_FEED_VALIDATION_CACHE_TTL_SECONDS = 60 * 60
+_DISCOVERY_HTML_CACHE_MAX = 512
+_FEED_VALIDATION_CACHE_MAX = 1024
+_DISCOVERY_HTML_CACHE: dict[str, tuple[float, str]] = {}
+_FEED_VALIDATION_CACHE: dict[str, tuple[float, bool]] = {}
+_CACHE_LOCK = threading.Lock()
+
+
+REGION_PROFILES: Dict[str, RegionProfile] = {
+    "us": RegionProfile(
+        key="us",
+        label="United States",
+        gl="US",
+        ceid="US:en",
+        hl="en-US",
+        utility_terms=("utility outage", "power outage map", "county emergency alerts"),
+        transport_terms=("traffic alerts", "DOT incidents", "FAA ground stop"),
+        emergency_terms=("NWS alerts", "emergency management", "public safety alerts"),
+    ),
+    "canada": RegionProfile(
+        key="canada",
+        label="Canada",
+        gl="CA",
+        ceid="CA:en",
+        hl="en-CA",
+        utility_terms=("hydro outage", "utility outage map", "power restoration"),
+        transport_terms=("511 road conditions", "transit service alerts", "airport delays"),
+        emergency_terms=("public safety alert", "provincial emergency", "weather warnings canada"),
+    ),
+    "europe": RegionProfile(
+        key="europe",
+        label="Europe",
+        gl="GB",
+        ceid="GB:en",
+        hl="en-GB",
+        utility_terms=("grid operator outage", "electricity network outage", "gas network incident"),
+        transport_terms=("motorway closure", "rail disruption", "airport operations alerts"),
+        emergency_terms=("civil protection alerts", "severe weather warning", "flood warning"),
+    ),
+    "north_africa": RegionProfile(
+        key="north_africa",
+        label="North Africa",
+        gl="EG",
+        ceid="EG:en",
+        hl="en",
+        utility_terms=("electricity outage", "water cuts", "gas supply disruption"),
+        transport_terms=("road closure", "airport disruptions", "port operations disruption"),
+        emergency_terms=("civil protection", "flood warning", "wildfire alerts"),
+    ),
+    "china": RegionProfile(
+        key="china",
+        label="China",
+        gl="CN",
+        ceid="CN:en",
+        hl="en",
+        utility_terms=("power grid outage", "water utility disruption", "gas supply incident"),
+        transport_terms=("rail disruption", "metro service alert", "airport delays"),
+        emergency_terms=("typhoon warning", "flood control alert", "emergency response"),
+    ),
+    "far_east": RegionProfile(
+        key="far_east",
+        label="Far East",
+        gl="JP",
+        ceid="JP:en",
+        hl="en",
+        utility_terms=("power outage", "grid disruption", "utility emergency"),
+        transport_terms=("rail service disruption", "airport operations alert", "ferry disruption"),
+        emergency_terms=("earthquake warning", "typhoon warning", "flood alert"),
+    ),
+    "australia": RegionProfile(
+        key="australia",
+        label="Australia",
+        gl="AU",
+        ceid="AU:en",
+        hl="en-AU",
+        utility_terms=("power outage", "network outage", "water outage"),
+        transport_terms=("traffic incidents", "road closures", "airport disruptions"),
+        emergency_terms=("bushfire warning", "SES alerts", "BOM severe weather warning"),
+    ),
+    "south_africa": RegionProfile(
+        key="south_africa",
+        label="South Africa",
+        gl="ZA",
+        ceid="ZA:en",
+        hl="en-ZA",
+        utility_terms=("eskom load shedding", "municipal power outage", "water outage"),
+        transport_terms=("traffic disruptions", "road closures", "airport delays"),
+        emergency_terms=("disaster management", "flood warning", "wildfire alerts"),
+    ),
+    "central_america": RegionProfile(
+        key="central_america",
+        label="Central America",
+        gl="MX",
+        ceid="MX:es-419",
+        hl="es-419",
+        utility_terms=("apagones electricidad", "corte de luz", "corte de agua"),
+        transport_terms=("cierres viales", "alerta de trafico", "aeropuerto retrasos"),
+        emergency_terms=("proteccion civil", "alerta por inundacion", "alerta por huracan"),
+    ),
+    "south_america": RegionProfile(
+        key="south_america",
+        label="South America",
+        gl="BR",
+        ceid="BR:pt-419",
+        hl="pt-BR",
+        utility_terms=("apagao energia", "corte de luz", "abastecimento de agua"),
+        transport_terms=("interdicao rodovia", "transito alertas", "atrasos aeroporto"),
+        emergency_terms=("defesa civil alertas", "enchente alerta", "incendio florestal alerta"),
+    ),
+    "middle_east": RegionProfile(
+        key="middle_east",
+        label="Middle East",
+        gl="AE",
+        ceid="AE:en",
+        hl="en",
+        utility_terms=("power outage", "water outage", "grid disruption"),
+        transport_terms=("airport disruptions", "traffic incidents", "port operations disruption"),
+        emergency_terms=("civil defense alerts", "conflict escalation", "flood warning"),
+    ),
+    "south_asia": RegionProfile(
+        key="south_asia",
+        label="South Asia",
+        gl="IN",
+        ceid="IN:en",
+        hl="en-IN",
+        utility_terms=("power cut", "electricity outage", "water supply disruption"),
+        transport_terms=("rail disruption", "traffic jams alerts", "airport delays"),
+        emergency_terms=("disaster management alert", "flood warning", "cyclone warning"),
+    ),
+    "southeast_asia": RegionProfile(
+        key="southeast_asia",
+        label="Southeast Asia",
+        gl="SG",
+        ceid="SG:en",
+        hl="en",
+        utility_terms=("power outage", "water disruption", "grid failure"),
+        transport_terms=("traffic alert", "rail disruption", "airport delays"),
+        emergency_terms=("flood alert", "typhoon warning", "disaster response"),
+    ),
+    "sub_saharan_africa": RegionProfile(
+        key="sub_saharan_africa",
+        label="Sub-Saharan Africa",
+        gl="KE",
+        ceid="KE:en",
+        hl="en",
+        utility_terms=("power outage", "load shedding", "water supply disruption"),
+        transport_terms=("road closures", "traffic alerts", "airport disruptions"),
+        emergency_terms=("disaster management", "flood alert", "humanitarian crisis"),
+    ),
+    "global": RegionProfile(
+        key="global",
+        label="Global",
+        gl="US",
+        ceid="US:en",
+        hl="en-US",
+        utility_terms=("power outage map", "grid disruption", "utility emergency"),
+        transport_terms=("aviation disruptions", "traffic incidents", "rail disruptions"),
+        emergency_terms=("disaster alerts", "humanitarian crisis", "conflict escalation"),
+    ),
+}
+
+
+REGION_HINTS: Dict[str, tuple[str, ...]] = {
+    "canada": ("canada", "ontario", "quebec", "alberta", "bc", "british columbia", "toronto", "montreal", "vancouver"),
+    "europe": (
+        "europe", "uk", "united kingdom", "england", "scotland", "wales", "ireland",
+        "france", "germany", "spain", "italy", "portugal", "netherlands", "belgium",
+        "sweden", "norway", "denmark", "finland", "poland", "ukraine", "romania",
+        "greece", "serbia", "croatia", "bosnia", "slovenia", "austria", "switzerland",
+        "czech", "slovakia", "hungary", "bulgaria", "albania", "montenegro", "kosovo",
+        "moldova", "estonia", "latvia", "lithuania",
+    ),
+    "north_africa": ("north africa", "morocco", "algeria", "tunisia", "libya", "egypt", "sudan"),
+    "china": ("china", "beijing", "shanghai", "guangzhou", "shenzhen", "hong kong"),
+    "far_east": ("japan", "tokyo", "korea", "seoul", "taiwan", "taipei", "philippines", "manila"),
+    "australia": ("australia", "sydney", "melbourne", "brisbane", "perth", "adelaide", "canberra", "tasmania", "queensland", "nsw"),
+    "south_africa": ("south africa", "johannesburg", "cape town", "durban", "pretoria", "eskom"),
+    "central_america": ("central america", "guatemala", "belize", "honduras", "el salvador", "nicaragua", "costa rica", "panama"),
+    "south_america": (
+        "south america", "brazil", "argentina", "chile", "colombia", "peru", "ecuador",
+        "bolivia", "paraguay", "uruguay", "venezuela", "guyana", "suriname",
+    ),
+    "middle_east": (
+        "middle east", "israel", "palestine", "gaza", "west bank", "lebanon", "jordan",
+        "syria", "iraq", "iran", "saudi", "uae", "dubai", "abu dhabi", "qatar", "oman",
+        "yemen", "kuwait", "bahrain",
+    ),
+    "south_asia": (
+        "india", "pakistan", "bangladesh", "nepal", "sri lanka", "bhutan", "maldives",
+        "new delhi", "mumbai", "karachi", "dhaka", "colombo",
+    ),
+    "southeast_asia": (
+        "indonesia", "jakarta", "malaysia", "kuala lumpur", "singapore", "thailand", "bangkok",
+        "vietnam", "hanoi", "ho chi minh", "philippines", "manila", "cambodia", "laos", "myanmar",
+    ),
+    "sub_saharan_africa": (
+        "kenya", "nairobi", "uganda", "kampala", "tanzania", "dar es salaam", "ethiopia", "addis ababa",
+        "ghana", "accra", "nigeria", "lagos", "abuja", "rwanda", "zambia", "zimbabwe", "botswana", "namibia",
+    ),
+}
+
+
+REGIONAL_SIGNAL_SOURCES: Dict[str, List[Source]] = {
+    "canada": [
+        Source("Environment and Climate Change Canada", "https://weather.gc.ca"),
+        Source("The Weather Network", "https://www.theweathernetwork.com/ca"),
+        Source("CBC News", "https://www.cbc.ca/news"),
+        Source("CP24", "https://www.cp24.com"),
+        Source("Hydro One", "https://www.hydroone.com"),
+        Source("BC Hydro", "https://www.bchydro.com"),
+        Source("Hydro-Québec", "https://www.hydroquebec.com"),
+        Source("PowerStream/Alectra", "https://www.alectrautilities.com"),
+    ],
+    "europe": [
+        Source("Meteoalarm", "https://www.meteoalarm.org"),
+        Source("Copernicus EMS", "https://emergency.copernicus.eu"),
+        Source("European Commission ERCC", "https://civil-protection-humanitarian-aid.ec.europa.eu"),
+        Source("National Grid UK", "https://www.nationalgrid.com"),
+        Source("National Highways UK", "https://nationalhighways.co.uk"),
+        Source("Network Rail", "https://www.networkrail.co.uk"),
+        Source("Eurocontrol", "https://www.eurocontrol.int"),
+    ],
+    "north_africa": [
+        Source("Ahram Online", "https://english.ahram.org.eg"),
+        Source("Morocco World News", "https://www.moroccoworldnews.com"),
+        Source("Tunisie Numerique", "https://www.tunisienumerique.com"),
+        Source("Libya Observer", "https://libyaobserver.ly"),
+        Source("Algerie Presse Service", "https://www.aps.dz/en"),
+        Source("EgyptAir", "https://www.egyptair.com"),
+    ],
+    "china": [
+        Source("National Meteorological Center China", "http://www.nmc.cn/en"),
+        Source("China Daily", "https://www.chinadaily.com.cn"),
+        Source("Xinhua", "https://english.news.cn"),
+        Source("CGTN", "https://www.cgtn.com"),
+        Source("South China Morning Post", "https://www.scmp.com"),
+        Source("State Grid Corporation of China", "https://www.sgcc.com.cn"),
+        Source("China Southern Power Grid", "https://www.csg.cn"),
+    ],
+    "far_east": [
+        Source("Japan Meteorological Agency", "https://www.jma.go.jp/jma/indexe.html"),
+        Source("NHK World", "https://www3.nhk.or.jp/nhkworld/"),
+        Source("Japan Times", "https://www.japantimes.co.jp"),
+        Source("Korea Herald", "https://www.koreaherald.com"),
+        Source("Yonhap", "https://en.yna.co.kr"),
+        Source("CNA Singapore", "https://www.channelnewsasia.com"),
+        Source("Straits Times", "https://www.straitstimes.com"),
+        Source("Taiwan News", "https://www.taiwannews.com.tw"),
+    ],
+    "australia": [
+        Source("Bureau of Meteorology", "https://www.bom.gov.au"),
+        Source("NSW SES", "https://www.ses.nsw.gov.au"),
+        Source("Queensland Traffic", "https://qldtraffic.qld.gov.au"),
+        Source("VicEmergency", "https://www.emergency.vic.gov.au"),
+        Source("ABC News AU", "https://www.abc.net.au/news"),
+        Source("SBS News", "https://www.sbs.com.au/news"),
+        Source("Ausgrid", "https://www.ausgrid.com.au"),
+        Source("SA Power Networks", "https://www.sapowernetworks.com.au"),
+    ],
+    "south_africa": [
+        Source("Eskom", "https://www.eskom.co.za"),
+        Source("South African Weather Service", "https://www.weathersa.co.za"),
+        Source("SANRAL", "https://www.nra.co.za"),
+        Source("News24", "https://www.news24.com"),
+        Source("SABC News", "https://www.sabcnews.com/sabcnews/"),
+        Source("City Power Johannesburg", "https://www.citypower.co.za"),
+    ],
+    "central_america": [
+        Source("CONRED Guatemala", "https://conred.gob.gt"),
+        Source("SINAPROC Panama", "https://www.sinaproc.gob.pa"),
+        Source("Comision Nacional de Emergencias CR", "https://www.cne.go.cr"),
+        Source("La Prensa (Panama)", "https://www.prensa.com"),
+        Source("La Nacion (Costa Rica)", "https://www.nacion.com"),
+        Source("El Heraldo (Honduras)", "https://www.elheraldo.hn"),
+    ],
+    "south_america": [
+        Source("INMET Brazil", "https://portal.inmet.gov.br"),
+        Source("Defesa Civil SP", "https://www.defesacivil.sp.gov.br"),
+        Source("Metsul", "https://metsul.com"),
+        Source("SMN Argentina", "https://www.smn.gob.ar"),
+        Source("ONEMI/SENAPRED Chile", "https://www.senapred.cl"),
+        Source("IDEAM Colombia", "http://www.ideam.gov.co"),
+        Source("SENAMHI Peru", "https://www.senamhi.gob.pe"),
+        Source("El Tiempo", "https://www.eltiempo.com"),
+    ],
+    "middle_east": [
+        Source("Al Jazeera", "https://www.aljazeera.com"),
+        Source("Arab News", "https://www.arabnews.com"),
+        Source("The National", "https://www.thenationalnews.com"),
+        Source("Times of Israel", "https://www.timesofisrael.com"),
+        Source("Jerusalem Post", "https://www.jpost.com"),
+        Source("Middle East Eye", "https://www.middleeasteye.net"),
+        Source("UN OCHA", "https://www.unocha.org"),
+    ],
+    "south_asia": [
+        Source("IMD India", "https://mausam.imd.gov.in"),
+        Source("NDMA India", "https://ndma.gov.in"),
+        Source("The Hindu", "https://www.thehindu.com"),
+        Source("Indian Express", "https://indianexpress.com"),
+        Source("Dawn", "https://www.dawn.com"),
+        Source("BDNews24", "https://bdnews24.com"),
+    ],
+    "southeast_asia": [
+        Source("BMKG Indonesia", "https://www.bmkg.go.id"),
+        Source("Meteo Malaysia", "https://www.met.gov.my"),
+        Source("PAGASA", "https://www.pagasa.dost.gov.ph"),
+        Source("The Straits Times", "https://www.straitstimes.com"),
+        Source("Bangkok Post", "https://www.bangkokpost.com"),
+        Source("VNExpress", "https://e.vnexpress.net"),
+    ],
+    "sub_saharan_africa": [
+        Source("Kenya Power", "https://www.kplc.co.ke"),
+        Source("KMD Kenya", "https://www.meteo.go.ke"),
+        Source("NEMA Nigeria", "https://nema.gov.ng"),
+        Source("MyJoyOnline", "https://www.myjoyonline.com"),
+        Source("Daily Nation", "https://nation.africa"),
+        Source("The East African", "https://www.theeastafrican.co.ke"),
+    ],
+    "global": [
+        Source("ReliefWeb", "https://reliefweb.int"),
+        Source("GDACS", "https://www.gdacs.org"),
+        Source("UN OCHA", "https://www.unocha.org"),
+        Source("WHO Emergencies", "https://www.who.int/emergencies"),
+        Source("IFRC", "https://www.ifrc.org"),
+        Source("EASA", "https://www.easa.europa.eu"),
+        Source("ICAO", "https://www.icao.int"),
+    ],
+}
 
 
 # US State abbreviations for NWS alerts
@@ -362,6 +723,17 @@ DEFAULT_SOURCES: List[Source] = [
     Source("Weather.gov", "https://www.weather.gov"),
     Source("NOAA", "https://www.noaa.gov"),
     Source("NWS Alerts", "https://alerts.weather.gov"),
+    Source("PowerOutage.us", "https://poweroutage.us"),
+    Source("FAA", "https://www.faa.gov"),
+    Source("FAA NAS Status", "https://nasstatus.faa.gov"),
+    Source("FlightAware", "https://www.flightaware.com"),
+    Source("FlightRadar24", "https://www.flightradar24.com"),
+    Source("InciWeb", "https://inciweb.wildfire.gov"),
+    Source("USGS Earthquake Hazards", "https://earthquake.usgs.gov"),
+    Source("GDACS", "https://www.gdacs.org"),
+    Source("ReliefWeb", "https://reliefweb.int"),
+    Source("NASA FIRMS", "https://firms.modaps.eosdis.nasa.gov"),
+    Source("INRIX Traffic", "https://inrix.com"),
     Source("Los Angeles Times", "https://www.latimes.com"),
     Source("Chicago Tribune", "https://www.chicagotribune.com"),
     Source("Miami Herald", "https://www.miamiherald.com"),
@@ -525,6 +897,379 @@ DEFAULT_SOURCES: List[Source] = [
 ]
 
 
+def _normalized_words(text: str) -> set[str]:
+    cleaned = (
+        text.lower()
+        .replace("/", " ")
+        .replace("-", " ")
+        .replace(",", " ")
+        .replace(":", " ")
+    )
+    return {w for w in cleaned.split() if w}
+
+
+_US_STATE_NAMES: set[str] = {
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut",
+    "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa",
+    "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan",
+    "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada",
+    "new hampshire", "new jersey", "new mexico", "new york", "north carolina",
+    "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island",
+    "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont",
+    "virginia", "washington", "west virginia", "wisconsin", "wyoming",
+    "district of columbia", "dc",
+}
+
+_US_CITY_HINTS: set[str] = {
+    "new york", "los angeles", "chicago", "houston", "phoenix", "philadelphia",
+    "san antonio", "san diego", "dallas", "austin", "jacksonville", "fort worth",
+    "columbus", "charlotte", "san francisco", "indianapolis", "seattle", "denver",
+    "washington", "boston", "el paso", "nashville", "detroit", "oklahoma city",
+    "portland", "las vegas", "memphis", "louisville", "baltimore", "milwaukee",
+    "albuquerque", "tucson", "fresno", "mesa", "sacramento", "atlanta",
+    "kansas city", "miami", "raleigh", "omaha", "long beach", "virginia beach",
+    "oakland", "minneapolis", "tulsa", "tampa", "new orleans", "cleveland",
+    "honolulu", "orlando", "pittsburgh", "cincinnati", "st louis", "salt lake city",
+    "boise", "anchorage",
+}
+
+
+def _looks_like_us_location_text(location_name: str) -> bool:
+    text = (location_name or "").strip()
+    if not text:
+        return False
+    haystack = text.lower()
+    if "usa" in haystack or "united states" in haystack or "u.s." in haystack:
+        return True
+    if any(state in haystack for state in _US_STATE_NAMES):
+        return True
+    if re.search(r",\s*(?:[A-Z]{2})(?:\b|$)", text):
+        return True
+    if haystack in _US_CITY_HINTS:
+        return True
+    return False
+
+
+def _subject_has_any_keyword(subject: str, keywords: set[str] | tuple[str, ...]) -> bool:
+    if not subject:
+        return False
+    subject_lower = subject.lower()
+    words = _normalized_words(subject)
+    return any((" " in kw and kw in subject_lower) or (kw in words) for kw in keywords)
+
+
+def _infer_region_from_coords(
+    latitude: Optional[float],
+    longitude: Optional[float],
+) -> Optional[RegionProfile]:
+    if latitude is None or longitude is None:
+        return None
+    lat = float(latitude)
+    lon = float(longitude)
+
+    # Rough geographic boxes for source-language/region selection.
+    # North America / Central America:
+    # - Central America and Canada are checked first with tighter bounds.
+    # - The broader US box is evaluated afterward and includes Hawaii.
+    if 7 <= lat <= 19.5 and -93.5 <= lon <= -76:
+        return REGION_PROFILES["central_america"]
+
+    # Canada: use a stricter western latitude floor to keep Seattle in US, while
+    # allowing lower-lat eastern Canadian metros (e.g., Toronto) to map to Canada.
+    if (
+        (49 <= lat <= 84 and -141 <= lon < -95)
+        or (42 <= lat <= 84 and -95 <= lon <= -52)
+    ):
+        return REGION_PROFILES["canada"]
+
+    if 18 <= lat <= 72 and -170 <= lon <= -52:
+        return REGION_PROFILES["us"]
+
+    if 34 <= lat <= 72 and -25 <= lon <= 45:
+        return REGION_PROFILES["europe"]
+
+    if 15 <= lat <= 38 and -18 <= lon <= 40:
+        return REGION_PROFILES["north_africa"]
+
+    if 12 <= lat <= 42 and 34 <= lon <= 64:
+        return REGION_PROFILES["middle_east"]
+
+    if -35 <= lat <= -20 and 16 <= lon <= 33:
+        return REGION_PROFILES["south_africa"]
+
+    # Sub-Saharan Africa broad box; keep a small overlap band (15-20N) for border cases,
+    # but North Africa precedence above handles the most relevant matches first.
+    if -35 <= lat <= 20 and -20 <= lon <= 52:
+        return REGION_PROFILES["sub_saharan_africa"]
+
+    if -56 <= lat <= 13 and -82 <= lon <= -34:
+        return REGION_PROFILES["south_america"]
+
+    if -45 <= lat <= -9 and 110 <= lon <= 180:
+        return REGION_PROFILES["australia"]
+
+    # South Asia / China / Southeast Asia intentionally overlap in border regions.
+    # The evaluation order below acts as precedence to keep routing stable and deterministic.
+    if 5 <= lat <= 36 and 60 <= lon <= 98:
+        return REGION_PROFILES["south_asia"]
+
+    if -12 <= lat <= 24 and 95 <= lon <= 141:
+        return REGION_PROFILES["southeast_asia"]
+
+    if 18 <= lat <= 54 and 73 <= lon <= 135:
+        return REGION_PROFILES["china"]
+
+    if 0 <= lat <= 55 and 120 <= lon <= 155:
+        return REGION_PROFILES["far_east"]
+
+    return REGION_PROFILES["global"]
+
+
+def infer_region_profile(
+    location_name: str = "",
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> RegionProfile:
+    """Infer a monitoring region/country profile from location text, ZIP code, and optional coordinates."""
+    if zip_code and get_state_from_zip(zip_code):
+        return REGION_PROFILES["us"]
+
+    coord_region = _infer_region_from_coords(latitude, longitude)
+    if coord_region is not None:
+        return coord_region
+
+    haystack = (location_name or "").lower()
+    for key in (
+        "canada",
+        "europe",
+        "north_africa",
+        "middle_east",
+        "china",
+        "far_east",
+        "south_asia",
+        "southeast_asia",
+        "australia",
+        "south_africa",
+        "sub_saharan_africa",
+        "central_america",
+        "south_america",
+    ):
+        if any(hint in haystack for hint in REGION_HINTS.get(key, ())):
+            return REGION_PROFILES[key]
+
+    # Default to US behavior if no location is provided; otherwise Europe-first for international text.
+    if not haystack.strip():
+        return REGION_PROFILES["us"]
+    if _looks_like_us_location_text(location_name):
+        return REGION_PROFILES["us"]
+    return REGION_PROFILES["europe"]
+
+
+def _subject_context_categories(subject: str) -> set[str]:
+    if not subject:
+        return set()
+    words = _normalized_words(subject)
+    categories: set[str] = set()
+    for category, keywords in EXTREME_CONTEXT_KEYWORDS.items():
+        if any((" " in kw and kw in subject.lower()) or (kw in words) for kw in keywords):
+            categories.add(category)
+    return categories
+
+
+def _google_news_rss(
+    query: str,
+    gl: str = "US",
+    ceid: str = "US:en",
+    hl: str = "en-US",
+) -> str:
+    return f"https://news.google.com/rss/search?q={quote_plus(query)}&hl={hl}&gl={gl}&ceid={ceid}"
+
+
+def regional_signal_sources(
+    location_name: str = "",
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> List[Source]:
+    """Return curated source URLs prioritized for the inferred region."""
+    region = infer_region_profile(location_name, zip_code, latitude, longitude)
+    ordered: List[Source] = []
+    seen: set[str] = set()
+
+    # Europe should remain a top international baseline for non-US monitoring.
+    preferred_keys = [region.key]
+    if region.key != "europe":
+        preferred_keys.append("europe")
+    if region.key not in ("us", "canada"):
+        preferred_keys.append("canada")
+
+    for key in preferred_keys:
+        for src in REGIONAL_SIGNAL_SOURCES.get(key, []):
+            if src.url in seen:
+                continue
+            seen.add(src.url)
+            ordered.append(src)
+
+    for src in REGIONAL_SIGNAL_SOURCES.get("global", []):
+        if src.url in seen:
+            continue
+        seen.add(src.url)
+        ordered.append(src)
+    return ordered
+
+
+def regional_signal_source_urls(
+    location_name: str = "",
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> List[str]:
+    """Return curated source URLs for the inferred region (convenience helper)."""
+    return [s.url for s in regional_signal_sources(location_name, zip_code, latitude, longitude)]
+
+
+def build_contextual_google_news_feeds(
+    subject: str,
+    location_name: str,
+    zip_code: Optional[str] = None,
+    state_abbrev: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    max_feeds: int = 24,
+) -> List[str]:
+    """Build on-demand Google News RSS feeds for likely emergency/infrastructure contexts."""
+    feeds: List[str] = []
+    region = infer_region_profile(location_name, zip_code, latitude, longitude)
+    location_hint = " ".join(part for part in [location_name, zip_code] if part).strip()
+    if not location_hint and latitude is not None and longitude is not None:
+        location_hint = f"{latitude:.3f},{longitude:.3f}"
+    state_name = get_state_name(state_abbrev) if state_abbrev else None
+    categories = _subject_context_categories(subject)
+    if not categories and location_hint:
+        categories = {"power", "transport", "fire", "flood", "tornado"}
+
+    queries: List[str] = []
+    if location_hint:
+        if "power" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} power outage",
+                    f"{location_hint} outage map utility",
+                    f"{location_hint} poweroutage.us",
+                ]
+            )
+        if "water" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} water utility alert",
+                    f"{location_hint} boil water advisory",
+                    f"{location_hint} water main break",
+                ]
+            )
+        if "gas" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} gas utility emergency",
+                    f"{location_hint} gas leak advisory",
+                    f"{location_hint} pipeline incident",
+                ]
+            )
+        if "renewables" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} wind farm outage",
+                    f"{location_hint} solar farm outage",
+                    f"{location_hint} grid battery fire",
+                ]
+            )
+        if "transport" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} traffic incident",
+                    f"{location_hint} road closure",
+                    f"{location_hint} transit alerts",
+                ]
+            )
+        if "aviation" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} airport delays",
+                    f"{location_hint} airline cancellations",
+                    f"{location_hint} FAA ground stop",
+                ]
+            )
+        if "fire" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} wildfire evacuation",
+                    f"{location_hint} fire alerts",
+                ]
+            )
+        if "flood" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} flood warning",
+                    f"{location_hint} flash flood emergency",
+                ]
+            )
+        if "tornado" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} tornado warning",
+                    f"{location_hint} severe thunderstorm warning",
+                ]
+            )
+        if "winter" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} winter storm warning",
+                    f"{location_hint} ice storm outage",
+                ]
+            )
+        if "earthquake" in categories:
+            queries.extend(
+                [
+                    f"{location_hint} earthquake",
+                    f"{location_hint} seismic activity",
+                ]
+            )
+        for term in region.utility_terms:
+            queries.append(f"{location_hint} {term}")
+        for term in region.transport_terms:
+            queries.append(f"{location_hint} {term}")
+        for term in region.emergency_terms:
+            queries.append(f"{location_hint} {term}")
+
+    # Global crisis/conflict monitoring (can be subject-driven even without ZIP)
+    if "conflict" in categories:
+        geo = location_hint or state_name or subject.strip()
+        if geo:
+            queries.extend(
+                [
+                    f"{geo} conflict escalation",
+                    f"{geo} war alerts",
+                    f"{geo} civilian evacuation",
+                    f"{geo} missile strike",
+                ]
+            )
+        queries.extend(["global conflict alerts", "war zone humanitarian crisis"])
+
+    if not queries and subject:
+        base_query = " ".join(part for part in [subject.strip(), location_hint] if part).strip()
+        if base_query:
+            queries.append(base_query)
+
+    if location_hint and not subject:
+        queries.extend([f"{location_hint} {term}" for term in region.emergency_terms[:2]])
+
+    for q in dict.fromkeys(q for q in queries if q):
+        feeds.append(_google_news_rss(q, gl=region.gl, ceid=region.ceid, hl=region.hl))
+        if max_feeds > 0 and len(feeds) >= max_feeds:
+            break
+    return feeds
+
+
 def _same_domain(base: str, candidate: str) -> bool:
     try:
         return urlparse(base).netloc == urlparse(candidate).netloc
@@ -541,13 +1286,46 @@ def _normalize(url: str) -> str:
     return url.split("#", 1)[0]
 
 
-def discover_feed_links(base_url: str, client: httpx.Client) -> List[str]:
+def _prune_cache(cache: dict, max_items: int) -> None:
+    if len(cache) <= max_items:
+        return
+    overflow = len(cache) - max_items
+    for key in sorted(cache, key=lambda k: cache[k][0])[:overflow]:
+        cache.pop(key, None)
+
+
+def _get_cached_html(url: str) -> Optional[str]:
+    with _CACHE_LOCK:
+        entry = _DISCOVERY_HTML_CACHE.get(url)
+        if not entry:
+            return None
+        ts, html = entry
+        if time.time() - ts > _DISCOVERY_HTML_CACHE_TTL_SECONDS:
+            _DISCOVERY_HTML_CACHE.pop(url, None)
+            return None
+        return html
+
+
+def _fetch_html_cached(base_url: str, client: httpx.Client) -> Optional[str]:
+    cached = _get_cached_html(base_url)
+    if cached is not None:
+        return cached
     try:
         resp = client.get(base_url, timeout=8.0)
         resp.raise_for_status()
     except Exception:
+        return None
+    with _CACHE_LOCK:
+        _DISCOVERY_HTML_CACHE[base_url] = (time.time(), resp.text)
+        _prune_cache(_DISCOVERY_HTML_CACHE, _DISCOVERY_HTML_CACHE_MAX)
+    return resp.text
+
+
+def discover_feed_links(base_url: str, client: httpx.Client) -> List[str]:
+    html = _fetch_html_cached(base_url, client)
+    if html is None:
         return []
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     feeds: List[str] = []
     for link in soup.find_all("link"):
         rel = " ".join(link.get("rel", [])).lower()
@@ -567,12 +1345,10 @@ def discover_feed_links(base_url: str, client: httpx.Client) -> List[str]:
 
 
 def discover_section_links(base_url: str, client: httpx.Client) -> List[str]:
-    try:
-        resp = client.get(base_url, timeout=8.0)
-        resp.raise_for_status()
-    except Exception:
+    html = _fetch_html_cached(base_url, client)
+    if html is None:
         return []
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     links: List[str] = []
     keywords = {"world", "news", "us", "local", "weather", "alerts", "breaking", "politics"}
     for anchor in soup.find_all("a"):
@@ -589,13 +1365,24 @@ def discover_section_links(base_url: str, client: httpx.Client) -> List[str]:
 
 
 def _validate_feed(url: str, client: httpx.Client) -> bool:
+    with _CACHE_LOCK:
+        cached = _FEED_VALIDATION_CACHE.get(url)
+        if cached:
+            ts, is_valid = cached
+            if time.time() - ts <= _FEED_VALIDATION_CACHE_TTL_SECONDS:
+                return is_valid
+            _FEED_VALIDATION_CACHE.pop(url, None)
     try:
         resp = client.get(url, timeout=8.0)
         resp.raise_for_status()
         text = resp.text.lower()
-        return "<rss" in text or "<feed" in text
+        is_valid = "<rss" in text or "<feed" in text
     except Exception:
-        return False
+        is_valid = False
+    with _CACHE_LOCK:
+        _FEED_VALIDATION_CACHE[url] = (time.time(), is_valid)
+        _prune_cache(_FEED_VALIDATION_CACHE, _FEED_VALIDATION_CACHE_MAX)
+    return is_valid
 
 
 def _root_url(url: str) -> str:
@@ -703,6 +1490,7 @@ def discover_local_source_feeds(
     location_name: str,
     zip_code: Optional[str] = None,
     max_feeds: int = 20,
+    low_bandwidth: bool = False,
 ) -> List[str]:
     location_hint = " ".join(part for part in [location_name, zip_code] if part)
     if not location_hint:
@@ -729,14 +1517,21 @@ def discover_local_source_feeds(
         "public-safety/rss",
         "alerts/rss",
     )
+    query_limit = 4 if low_bandwidth else len(queries)
+    per_query_result_limit = 3 if low_bandwidth else 6
+    candidate_path_limit = 4 if low_bandwidth else len(candidate_paths)
     feeds: List[str] = []
+    scanned_bases: set[str] = set()
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
-        for query in queries:
-            for result_url in _search_duckduckgo_urls(query, client)[:6]:
+        for query in queries[:query_limit]:
+            for result_url in _search_duckduckgo_urls(query, client)[:per_query_result_limit]:
                 if len(feeds) >= max_feeds:
                     return feeds
                 root_url = _root_url(result_url)
                 for base_url in (result_url, root_url):
+                    if base_url in scanned_bases:
+                        continue
+                    scanned_bases.add(base_url)
                     for feed in discover_feed_links(base_url, client):
                         if feed in feeds:
                             continue
@@ -744,7 +1539,7 @@ def discover_local_source_feeds(
                             feeds.append(feed)
                             if len(feeds) >= max_feeds:
                                 return feeds
-                for path in candidate_paths:
+                for path in candidate_paths[:candidate_path_limit]:
                     if len(feeds) >= max_feeds:
                         return feeds
                     candidate = f"{root_url.rstrip('/')}/{path}"
@@ -799,15 +1594,22 @@ def ensure_seed_feeds(existing: List[str]) -> List[str]:
     ]
 
 
-def build_local_feeds(location_name: str, zip_code: Optional[str] = None) -> List[str]:
+def build_local_feeds(
+    location_name: str,
+    zip_code: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> List[str]:
     queries = []
     if location_name:
         queries.append(location_name)
     if zip_code:
         queries.append(zip_code)
+    if not queries and latitude is not None and longitude is not None:
+        queries.append(f"{latitude:.3f},{longitude:.3f}")
     if not queries:
         return []
-    base = "https://news.google.com/rss/search"
+    region = infer_region_profile(location_name, zip_code, latitude, longitude)
     location_str = " ".join(queries)
     feed_queries = [
         f"{location_str} police",
@@ -816,10 +1618,17 @@ def build_local_feeds(location_name: str, zip_code: Optional[str] = None) -> Lis
         f"{location_str} emergency management",
         f"{location_str} weather alert",
         f"{location_str} road closure",
+        f"{location_str} power outage",
+        f"{location_str} utility outage map",
+        f"{location_str} traffic incidents",
+        f"{location_str} transit alerts",
+        f"{location_str} airport delays",
+        f"{location_str} flood warning",
+        f"{location_str} tornado warning",
     ]
     feeds = []
     for q in feed_queries:
-        feeds.append(f"{base}?q={quote_plus(q)}&hl=en-US&gl=US&ceid=US:en")
+        feeds.append(_google_news_rss(q, gl=region.gl, ceid=region.ceid, hl=region.hl))
     return feeds
 
 
@@ -892,16 +1701,49 @@ def build_utility_search_queries(
         f"{location_hint} electric utility power outage",
         f"{location_hint} power company outage map",
         f"{location_hint} electric company service alerts",
+        f"{location_hint} outage restoration updates utility",
+        f"{location_hint} coop electric outage map",
+        f"{location_hint} municipal electric utility alerts",
+        f"site:poweroutage.us {location_hint} outage",
     ])
 
     if state_name:
-        queries.append(f"{state_name} power outage map")
+        queries.extend(
+            [
+                f"{state_name} power outage map",
+                f"site:poweroutage.us {state_name} outage map",
+                f"{state_name} electric grid outage emergency",
+            ]
+        )
 
     # Gas utility searches
-    queries.append(f"{location_hint} gas utility emergency")
+    queries.extend(
+        [
+            f"{location_hint} gas utility emergency",
+            f"{location_hint} natural gas outage",
+            f"{location_hint} gas leak advisory utility",
+            f"{location_hint} pipeline incident alerts",
+        ]
+    )
 
     # Water utility searches
-    queries.append(f"{location_hint} water utility alerts")
+    queries.extend(
+        [
+            f"{location_hint} water utility alerts",
+            f"{location_hint} boil water advisory",
+            f"{location_hint} water main break emergency",
+            f"{location_hint} wastewater utility outage",
+        ]
+    )
+
+    # Renewables / distributed energy incidents
+    queries.extend(
+        [
+            f"{location_hint} solar outage utility",
+            f"{location_hint} wind farm outage",
+            f"{location_hint} battery storage fire utility",
+        ]
+    )
 
     return queries
 
@@ -944,6 +1786,21 @@ def build_emergency_service_queries(
         f"{location_hint} road closure alerts",
         f"{location_hint} traffic alerts",
         f"{location_hint} department transportation alerts",
+        f"{location_hint} DOT traffic incidents",
+        f"{location_hint} transit service alerts",
+        f"{location_hint} rail service disruption",
+        f"{location_hint} airport operations alerts",
+        f"{location_hint} airline cancellations",
+        f"{location_hint} FAA ground stop",
+    ])
+
+    # Extreme weather / disaster specific
+    queries.extend([
+        f"{location_hint} flood warning alerts",
+        f"{location_hint} flash flood emergency",
+        f"{location_hint} tornado warning alerts",
+        f"{location_hint} wildfire evacuation alerts",
+        f"{location_hint} hazmat incident public safety",
     ])
 
     return queries
@@ -986,10 +1843,12 @@ def search_local_emergency_sources(
 
 def discover_emergency_feeds(
     location_name: str,
+    subject: str = "",
     zip_code: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     max_feeds: int = 20,
+    low_bandwidth: bool = False,
 ) -> List[str]:
     """Discover RSS feeds from local emergency services, utilities, and government."""
     feeds: List[str] = []
@@ -1000,7 +1859,24 @@ def discover_emergency_feeds(
 
     # Add NWS weather feeds first (most reliable)
     nws_feeds = build_nws_weather_feeds(zip_code, state_abbrev)
-    feeds.extend(nws_feeds)
+    for feed in nws_feeds:
+        if feed not in feeds:
+            feeds.append(feed)
+
+    # Add contextual Google News feeds for outages/disasters/transport/aviation/conflict
+    for feed in build_contextual_google_news_feeds(
+        subject,
+        location_name,
+        zip_code,
+        state_abbrev,
+        latitude=latitude,
+        longitude=longitude,
+        max_feeds=10 if low_bandwidth else 24,
+    ):
+        if feed not in feeds:
+            feeds.append(feed)
+        if len(feeds) >= max_feeds:
+            return feeds[:max_feeds]
 
     # Build search queries
     emergency_queries = build_emergency_service_queries(
@@ -1016,12 +1892,17 @@ def discover_emergency_feeds(
             f"{location_hint} county emergency alerts RSS",
             f"{location_hint} city government news RSS",
             f"{location_hint} local news RSS feed",
+            f"{location_hint} utility outage RSS",
+            f"{location_hint} traffic alerts RSS",
+            f"{location_hint} airport alerts RSS",
         ]
         if state_name:
             targeted_queries.append(f"{state_name} emergency management RSS")
             targeted_queries.append(f"{state_name} state police alerts RSS")
+            targeted_queries.append(f"{state_name} power outage RSS")
+            targeted_queries.append(f"{state_name} DOT traffic alerts RSS")
 
-    all_queries = emergency_queries[:6] + utility_queries[:4] + targeted_queries
+    all_queries = emergency_queries[: (3 if low_bandwidth else 6)] + utility_queries[: (2 if low_bandwidth else 4)] + targeted_queries[: (4 if low_bandwidth else len(targeted_queries))]
 
     candidate_paths = (
         "rss",
@@ -1035,15 +1916,42 @@ def discover_emergency_feeds(
         "alerts/feed",
         "press/rss",
         "media/rss",
+        "outages/rss",
+        "status/rss",
+        "incidents/rss",
+        "traffic/rss",
+        "transit/rss",
     )
+    source_scan_limit = 8 if low_bandwidth else 20
+    query_result_limit = 2 if low_bandwidth else 4
+    candidate_path_limit = 6 if low_bandwidth else len(candidate_paths)
 
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
+        scanned_bases: set[str] = set()
+        # Try curated regional source URLs first (seamless path for lat/lon-only configurations)
+        for source in regional_signal_sources(location_name, zip_code, latitude, longitude)[:source_scan_limit]:
+            if len(feeds) >= max_feeds:
+                break
+            for base_url in (source.url, _root_url(source.url)):
+                if base_url in scanned_bases:
+                    continue
+                scanned_bases.add(base_url)
+                for feed in discover_feed_links(base_url, client):
+                    if feed in feeds:
+                        continue
+                    if _validate_feed(feed, client):
+                        feeds.append(feed)
+                        if len(feeds) >= max_feeds:
+                            break
+                if len(feeds) >= max_feeds:
+                    break
+
         for query in all_queries:
             if len(feeds) >= max_feeds:
                 break
 
             # Search for potential sources
-            for result_url in _search_duckduckgo_urls(query, client)[:4]:
+            for result_url in _search_duckduckgo_urls(query, client)[:query_result_limit]:
                 if len(feeds) >= max_feeds:
                     break
 
@@ -1053,6 +1961,9 @@ def discover_emergency_feeds(
                 for base_url in (result_url, root_url):
                     if len(feeds) >= max_feeds:
                         break
+                    if base_url in scanned_bases:
+                        continue
+                    scanned_bases.add(base_url)
 
                     for feed in discover_feed_links(base_url, client):
                         if feed in feeds:
@@ -1063,7 +1974,7 @@ def discover_emergency_feeds(
                                 break
 
                 # Try common feed paths
-                for path in candidate_paths:
+                for path in candidate_paths[:candidate_path_limit]:
                     if len(feeds) >= max_feeds:
                         break
                     candidate = f"{root_url.rstrip('/')}/{path}"
@@ -1072,7 +1983,7 @@ def discover_emergency_feeds(
                     if _validate_feed(candidate, client):
                         feeds.append(candidate)
 
-    return feeds
+    return feeds[:max_feeds]
 
 
 def build_comprehensive_local_feeds(
@@ -1081,6 +1992,7 @@ def build_comprehensive_local_feeds(
     zip_code: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+    low_bandwidth: bool = False,
 ) -> List[str]:
     """Build a comprehensive list of feeds for a location including emergency services,
     weather, utilities, and local news.
@@ -1103,7 +2015,19 @@ def build_comprehensive_local_feeds(
         add_feed(feed)
 
     # 2. Google News feeds for local topics
-    for feed in build_local_feeds(location_name, zip_code):
+    for feed in build_local_feeds(location_name, zip_code, latitude, longitude):
+        add_feed(feed)
+
+    # 2b. Subject-driven Google News topic feeds for outages, disasters, transport, conflict, etc.
+    for feed in build_contextual_google_news_feeds(
+        subject,
+        location_name,
+        zip_code,
+        state_abbrev,
+        latitude=latitude,
+        longitude=longitude,
+        max_feeds=10 if low_bandwidth else 24,
+    ):
         add_feed(feed)
 
     # 3. Subject + location Google News feed
@@ -1117,7 +2041,13 @@ def build_comprehensive_local_feeds(
     # 4. Emergency services and utility feeds (discovered)
     try:
         emergency_feeds = discover_emergency_feeds(
-            location_name, zip_code, latitude, longitude, max_feeds=15
+            subject=subject,
+            location_name=location_name,
+            zip_code=zip_code,
+            latitude=latitude,
+            longitude=longitude,
+            max_feeds=10 if low_bandwidth else 20,
+            low_bandwidth=low_bandwidth,
         )
         for feed in emergency_feeds:
             add_feed(feed)
@@ -1126,13 +2056,18 @@ def build_comprehensive_local_feeds(
 
     # 5. Local source feeds (police, fire, news)
     try:
-        local_feeds = discover_local_source_feeds(location_name, zip_code, max_feeds=10)
+        local_feeds = discover_local_source_feeds(
+            location_name,
+            zip_code,
+            max_feeds=5 if low_bandwidth else 10,
+            low_bandwidth=low_bandwidth,
+        )
         for feed in local_feeds:
             add_feed(feed)
     except Exception:
         pass  # Don't fail if local source discovery fails
 
-    return feeds
+    return feeds[:40] if low_bandwidth else feeds
 
 
 def search_emergency_info(
@@ -1142,6 +2077,7 @@ def search_emergency_info(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     max_results: int = 30,
+    low_bandwidth: bool = False,
 ) -> List[SearchResult]:
     """Search for emergency-related information for a subject at a location.
 
@@ -1169,7 +2105,7 @@ def search_emergency_info(
 
         # Power/utility related if relevant keywords in subject
         power_keywords = {"storm", "weather", "outage", "power", "electric", "winter", "ice", "snow", "wind"}
-        if any(kw in subject.lower() for kw in power_keywords):
+        if _subject_has_any_keyword(subject, power_keywords):
             queries.extend([
                 f"{location_hint} power outage",
                 f"{location_hint} electric utility outage map",
@@ -1180,19 +2116,52 @@ def search_emergency_info(
 
         # Road conditions if relevant
         road_keywords = {"storm", "weather", "snow", "ice", "flood", "road", "travel", "drive"}
-        if any(kw in subject.lower() for kw in road_keywords):
+        if _subject_has_any_keyword(subject, road_keywords):
             queries.extend([
                 f"{location_hint} road conditions",
                 f"{location_hint} road closure",
                 f"{location_hint} travel advisory",
             ])
 
+    # Always add local emergency/utility/transport searches when a location is provided
+    if location_hint:
+        queries.extend(
+            build_emergency_service_queries(location_name, zip_code, latitude, longitude)
+        )
+        queries.extend(build_utility_search_queries(location_name, zip_code, state_abbrev))
+
+    if "conflict" in _subject_context_categories(subject):
+        conflict_geo = location_hint or state_name or subject
+        queries.extend(
+            [
+                f"{conflict_geo} war conflict updates",
+                f"{conflict_geo} missile/drone attack alerts",
+                f"{conflict_geo} civilian evacuation alerts",
+                f"site:reliefweb.int {conflict_geo} conflict",
+                f"site:gdacs.org {conflict_geo}",
+                f"site:aljazeera.com {conflict_geo} conflict",
+                f"site:reuters.com {conflict_geo} conflict",
+            ]
+        )
+
+    # Infrastructure + aviation domain-targeted searches for faster signal discovery
+    if location_hint:
+        queries.extend(
+            [
+                f"site:poweroutage.us {location_hint}",
+                f"site:faa.gov {location_hint} airport delays",
+                f"site:nasstatus.faa.gov {location_hint}",
+            ]
+        )
+
     # Search with the queries
+    query_limit = 10 if low_bandwidth else 24
+    per_query_limit = 3 if low_bandwidth else 5
     with httpx.Client(follow_redirects=True, timeout=8.0) as client:
-        for query in queries[:12]:  # Limit queries
+        for query in list(dict.fromkeys(q for q in queries if q))[:query_limit]:
             if len(results) >= max_results:
                 break
-            for result in _search_duckduckgo_results(query, client)[:5]:
+            for result in _search_duckduckgo_results(query, client)[:per_query_limit]:
                 if result.url in seen_urls:
                     continue
                 seen_urls.add(result.url)
