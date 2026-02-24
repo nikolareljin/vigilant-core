@@ -178,7 +178,10 @@ class MonitorEngine:
     def _get_local_source_feeds(self) -> List[str]:
         if self._local_source_feeds is None:
             # Use comprehensive local feeds when location info is available
-            if self.config.zip_code or (self.config.latitude and self.config.longitude):
+            has_coords = (
+                self.config.latitude is not None and self.config.longitude is not None
+            )
+            if self.config.zip_code or has_coords:
                 self._local_source_feeds = build_comprehensive_local_feeds(
                     subject=self.config.subject,
                     location_name=self.config.location_name,

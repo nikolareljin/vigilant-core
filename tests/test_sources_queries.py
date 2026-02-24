@@ -66,6 +66,10 @@ class SourceQueryTests(unittest.TestCase):
         self.assertEqual(infer_region_profile(location_name="Dallas").key, "us")
         self.assertEqual(infer_region_profile(location_name="Austin").key, "us")
 
+    def test_region_inference_plain_international_city_keeps_europe_fallback(self) -> None:
+        self.assertEqual(infer_region_profile(location_name="Paris").key, "europe")
+        self.assertEqual(infer_region_profile(location_name="Berlin").key, "europe")
+
     def test_region_inference_does_not_route_houston_coords_to_central_america(self) -> None:
         region = infer_region_profile(latitude=29.7604, longitude=-95.3698)  # Houston
         self.assertEqual(region.key, "us")

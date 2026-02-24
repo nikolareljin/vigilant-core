@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import threading
 import time
 from typing import Dict, List, Optional
 from urllib.parse import parse_qs, quote_plus, unquote, urljoin, urlparse
@@ -58,6 +59,7 @@ _DISCOVERY_HTML_CACHE_MAX = 512
 _FEED_VALIDATION_CACHE_MAX = 1024
 _DISCOVERY_HTML_CACHE: dict[str, tuple[float, str]] = {}
 _FEED_VALIDATION_CACHE: dict[str, tuple[float, bool]] = {}
+_CACHE_LOCK = threading.Lock()
 
 
 REGION_PROFILES: Dict[str, RegionProfile] = {
@@ -945,13 +947,6 @@ def _looks_like_us_location_text(location_name: str) -> bool:
         return True
     if haystack in _US_CITY_HINTS:
         return True
-
-    # Preserve legacy US-first behavior for common plain city/locality inputs.
-    words = [w for w in _normalized_words(text) if w]
-    if not words:
-        return False
-    if len(words) <= 3 and all(w.isalpha() for w in words):
-        return True
     return False
 
 
@@ -1300,14 +1295,15 @@ def _prune_cache(cache: dict, max_items: int) -> None:
 
 
 def _get_cached_html(url: str) -> Optional[str]:
-    entry = _DISCOVERY_HTML_CACHE.get(url)
-    if not entry:
-        return None
-    ts, html = entry
-    if time.time() - ts > _DISCOVERY_HTML_CACHE_TTL_SECONDS:
-        _DISCOVERY_HTML_CACHE.pop(url, None)
-        return None
-    return html
+    with _CACHE_LOCK:
+        entry = _DISCOVERY_HTML_CACHE.get(url)
+        if not entry:
+            return None
+        ts, html = entry
+        if time.time() - ts > _DISCOVERY_HTML_CACHE_TTL_SECONDS:
+            _DISCOVERY_HTML_CACHE.pop(url, None)
+            return None
+        return html
 
 
 def _fetch_html_cached(base_url: str, client: httpx.Client) -> Optional[str]:
@@ -1319,8 +1315,9 @@ def _fetch_html_cached(base_url: str, client: httpx.Client) -> Optional[str]:
         resp.raise_for_status()
     except Exception:
         return None
-    _DISCOVERY_HTML_CACHE[base_url] = (time.time(), resp.text)
-    _prune_cache(_DISCOVERY_HTML_CACHE, _DISCOVERY_HTML_CACHE_MAX)
+    with _CACHE_LOCK:
+        _DISCOVERY_HTML_CACHE[base_url] = (time.time(), resp.text)
+        _prune_cache(_DISCOVERY_HTML_CACHE, _DISCOVERY_HTML_CACHE_MAX)
     return resp.text
 
 
@@ -1368,12 +1365,13 @@ def discover_section_links(base_url: str, client: httpx.Client) -> List[str]:
 
 
 def _validate_feed(url: str, client: httpx.Client) -> bool:
-    cached = _FEED_VALIDATION_CACHE.get(url)
-    if cached:
-        ts, is_valid = cached
-        if time.time() - ts <= _FEED_VALIDATION_CACHE_TTL_SECONDS:
-            return is_valid
-        _FEED_VALIDATION_CACHE.pop(url, None)
+    with _CACHE_LOCK:
+        cached = _FEED_VALIDATION_CACHE.get(url)
+        if cached:
+            ts, is_valid = cached
+            if time.time() - ts <= _FEED_VALIDATION_CACHE_TTL_SECONDS:
+                return is_valid
+            _FEED_VALIDATION_CACHE.pop(url, None)
     try:
         resp = client.get(url, timeout=8.0)
         resp.raise_for_status()
@@ -1381,8 +1379,9 @@ def _validate_feed(url: str, client: httpx.Client) -> bool:
         is_valid = "<rss" in text or "<feed" in text
     except Exception:
         is_valid = False
-    _FEED_VALIDATION_CACHE[url] = (time.time(), is_valid)
-    _prune_cache(_FEED_VALIDATION_CACHE, _FEED_VALIDATION_CACHE_MAX)
+    with _CACHE_LOCK:
+        _FEED_VALIDATION_CACHE[url] = (time.time(), is_valid)
+        _prune_cache(_FEED_VALIDATION_CACHE, _FEED_VALIDATION_CACHE_MAX)
     return is_valid
 
 

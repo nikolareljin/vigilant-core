@@ -7,12 +7,22 @@ from typing import Any
 
 def normalize_suggestions(value: list[Any] | str | None) -> list[str]:
     if isinstance(value, list):
-        cleaned = []
+        cleaned: list[str] = []
         for item in value:
-            text = str(item).strip()
+            if isinstance(item, str):
+                text = item.strip()
+            elif isinstance(item, dict):
+                raw = item.get("text") or item.get("value") or item.get("label")
+                if not isinstance(raw, str):
+                    continue
+                text = raw.strip()
+            else:
+                continue
             if text:
                 cleaned.append(text)
-        return cleaned[:5]
+            if len(cleaned) >= 5:
+                break
+        return cleaned
     if isinstance(value, str):
         lines = [line.strip("-• \t") for line in value.splitlines()]
         cleaned = [line for line in lines if line]
