@@ -2,7 +2,7 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
-## [Unreleased]
+## [0.3.0] - 2026-02-24
 
 ### Added
 
