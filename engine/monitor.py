@@ -40,6 +40,7 @@ class AlertItem:
     snippet: str
     published_at: Optional[str]
     source: str
+    source_kind: str = "unknown"
 
 
 class MonitorEngine:
@@ -307,6 +308,7 @@ class MonitorEngine:
                             snippet=entry.get("summary", ""),
                             published_at=published,
                             source=parsed.feed.get("title", "RSS"),
+                            source_kind="rss",
                         )
                     )
         if bad_feeds:
@@ -392,6 +394,7 @@ class MonitorEngine:
                         snippet=article.get("description") or "",
                         published_at=article.get("publishedAt"),
                         source=article.get("source", {}).get("name", "News API"),
+                        source_kind="news_api",
                     )
                 )
             if items:
@@ -426,6 +429,7 @@ class MonitorEngine:
                             snippet=article.get("description") or "",
                             published_at=article.get("publishedAt"),
                             source=article.get("source", {}).get("name", "News API"),
+                            source_kind="news_api",
                         )
                     )
                 if items:
@@ -487,6 +491,7 @@ class MonitorEngine:
                     snippet=entry.get("snippet") or "",
                     published_at=None,
                     source="Bing Search",
+                    source_kind="bing_search",
                 )
             )
         return items
@@ -506,6 +511,7 @@ class MonitorEngine:
                     snippet=result.snippet,
                     published_at=None,
                     source="DuckDuckGo",
+                    source_kind="duckduckgo",
                 )
             )
         return items
@@ -536,6 +542,7 @@ class MonitorEngine:
                         snippet=result.snippet,
                         published_at=None,
                         source="Emergency Search",
+                        source_kind="emergency_search",
                     )
                 )
             logger.info("Found %d emergency-related results", len(items))
@@ -576,6 +583,7 @@ class MonitorEngine:
                     snippet=entry.get("snippet") or "",
                     published_at=None,
                     source="Google CSE",
+                    source_kind="google_cse",
                 )
             )
         return items
@@ -708,6 +716,7 @@ class MonitorEngine:
                 impact_score=parsed.impact_score,
                 is_relevant=parsed.is_relevant,
                 location_name=self.config.location_name,
+                source_kind=item.source_kind,
                 zip_code=self.config.zip_code,
                 latitude=self.config.latitude,
                 longitude=self.config.longitude,

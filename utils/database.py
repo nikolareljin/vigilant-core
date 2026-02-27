@@ -11,6 +11,14 @@ from .config import data_dir
 
 
 DB_NAME = "vigilantcore.db"
+ALERT_MIGRATION_COLUMNS = {
+    "severity": "TEXT",
+    "confidence": "REAL",
+    "event_timestamp_utc": "TEXT",
+    "location_zip_code": "TEXT",
+    "location_latitude": "REAL",
+    "location_longitude": "REAL",
+}
 
 
 def db_path() -> Path:
@@ -59,15 +67,14 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_alerts_impact ON alerts(impact_score)"
         )
         # Backward-compatible schema upgrades for existing databases.
-        _ensure_alert_column(conn, "severity", "TEXT")
-        _ensure_alert_column(conn, "confidence", "REAL")
-        _ensure_alert_column(conn, "event_timestamp_utc", "TEXT")
-        _ensure_alert_column(conn, "location_zip_code", "TEXT")
-        _ensure_alert_column(conn, "location_latitude", "REAL")
-        _ensure_alert_column(conn, "location_longitude", "REAL")
+        for column, type_sql in ALERT_MIGRATION_COLUMNS.items():
+            _ensure_alert_column(conn, column, type_sql)
 
 
 def _ensure_alert_column(conn: sqlite3.Connection, column: str, type_sql: str) -> None:
+    expected_type = ALERT_MIGRATION_COLUMNS.get(column)
+    if expected_type is None or expected_type != type_sql:
+        raise ValueError(f"Unsafe migration column definition: {column} {type_sql}")
     cur = conn.execute("PRAGMA table_info(alerts)")
     existing = {row["name"] for row in cur.fetchall()}
     if column in existing:
