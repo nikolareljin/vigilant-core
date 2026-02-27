@@ -43,6 +43,10 @@ You can also set `DISPLAY_TIMEZONE` there to force a specific timezone for alert
 |--------|---------|-------------|
 | `prefer_light_model` | true | Use qwen2.5:3b instead of 7b (recommended for 8GB RAM or less) |
 | `insight_refresh_minutes` | 5 | How often to refresh AI-generated insights |
+| `enable_gguf_summarizer` | false | Enable GGUF local summarizer for alert/risk snapshot summaries |
+| `gguf_model_path` | null | Path to local GGUF model file (used when GGUF summarizer is enabled) |
+| `gguf_n_ctx` | 2048 | GGUF context window for local summarization |
+| `gguf_max_tokens` | 220 | GGUF max generated tokens per summary call |
 
 ### Timing Settings
 
@@ -118,6 +122,12 @@ export ENABLE_DUCKDUCKGO_SEARCH=true
 
 # Ollama Model Override
 export OLLAMA_MODEL=qwen2.5:7b
+
+# Optional GGUF local summarizer (requires llama-cpp-python)
+export ENABLE_GGUF_SUMMARIZER=true
+export GGUF_MODEL_PATH=/path/to/model.gguf
+export GGUF_N_CTX=2048
+export GGUF_MAX_TOKENS=220
 ```
 
 ## Example config.json

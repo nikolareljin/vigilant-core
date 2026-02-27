@@ -53,6 +53,7 @@ cd vigilant-core
 - **Coordinate-First Source Discovery**: Latitude/longitude alone can infer region and automatically seed relevant regional source URLs and localized Google News feeds
 - **Source Preview UI/API**: Setup page preview and `/api/source-preview` endpoint show the inferred region and curated source URLs before saving
 - **AI Suggested Actions Toggle**: Enable/disable actionable suggestions shown next to the AI insight result from settings
+- **GGUF Local Summaries**: Optional GGUF-based local summarization for alert digests and risk snapshots (with heuristic fallback)
 - **Unified Event Normalization**: All alerts are normalized into a consistent schema with `severity`, `confidence`, UTC-normalized timestamps, and structured location fields
 - **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
@@ -334,8 +335,14 @@ The **Monitoring Question** feature lets you ask specific questions about your m
 The insight appears as an expandable card above the alerts list, showing:
 - **Summary**: Brief answer to your question
 - **Explanation**: Detailed analysis with supporting evidence
+- **Risk Snapshot (API)**: Local summary of current risk posture derived from recent alerts
 
 Configure refresh interval in Settings under "AI Settings".
+
+Risk snapshot endpoint:
+```bash
+curl "http://127.0.0.1:8765/api/risk-snapshot"
+```
 
 ## Web Dashboard
 
@@ -480,6 +487,11 @@ python src/main.py
 By default, the app uses `qwen2.5:7b` from Ollama. If RAM is 8GB or less, it auto-falls back to `qwen2.5:3b` unless `OLLAMA_MODEL` is set. You can override with:
 ```bash
 export OLLAMA_MODEL=qwen2.5:7b
+# Optional GGUF summarizer (requires llama-cpp-python and a local .gguf model)
+export ENABLE_GGUF_SUMMARIZER=true
+export GGUF_MODEL_PATH=/path/to/model.gguf
+export GGUF_N_CTX=2048
+export GGUF_MAX_TOKENS=220
 ```
 
 ## Packaging (One-Click App)
