@@ -18,6 +18,6 @@ Each event includes:
 ## Notes
 
 - Timestamp normalization supports both ISO timestamps and RFC822 feed timestamps.
-- Severity is derived from the existing impact score bands.
+- Severity is derived from impact score bands: `1–3` → `low`, `4–6` → `medium`, `7–8` → `high`, `9–10` → `critical`.
 - Confidence is estimated from source type + impact + relevance and clamped to `[0.0, 1.0]`.
 - Normalized event fields are persisted in SQLite and returned from `/api/alerts`.
