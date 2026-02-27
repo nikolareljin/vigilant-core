@@ -18,6 +18,7 @@ import pgeocode
 from .parser import ImpactParser
 from utils import database
 from utils.config import AppConfig, config_dir
+from utils.event_deduplication import deduplicate_events
 from utils.event_normalization import normalize_event_payload
 from utils.sources import (
     build_all_feeds,
@@ -673,15 +674,44 @@ class MonitorEngine:
                 combined.extend(group)
         logger.info("Fetched %d raw items before filtering", len(combined))
         seen = set()
-        unique_items = []
+        filtered_items = []
         for item in combined:
             if item.url in seen:
                 continue
             if not self._matches_location(item):
                 continue
             seen.add(item.url)
-            unique_items.append(item)
-        logger.info("Items after de-dup/location filter: %d", len(unique_items))
+            filtered_items.append(item)
+
+        merged_events = deduplicate_events(
+            [
+                {
+                    "url": item.url,
+                    "title": item.title,
+                    "snippet": item.snippet,
+                    "published_at": item.published_at,
+                    "source": item.source,
+                    "source_kind": item.source_kind,
+                }
+                for item in filtered_items
+            ]
+        )
+        unique_items = [
+            AlertItem(
+                url=event.url,
+                title=event.title,
+                snippet=event.snippet,
+                published_at=event.published_at,
+                source=event.source,
+                source_kind=event.source_kind,
+            )
+            for event in merged_events
+        ]
+        logger.info(
+            "Items after URL/location filter: %d | after event dedup: %d",
+            len(filtered_items),
+            len(unique_items),
+        )
         return unique_items
 
     def _build_google_news_feed(self) -> Optional[str]:
