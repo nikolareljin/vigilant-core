@@ -132,7 +132,7 @@ Before AI parsing and SQLite persistence, VigilantCore de-duplicates incoming al
 
 - URL-level duplicate suppression
 - semantic overlap checks (title/body token similarity)
-- event-time proximity checks (default 6-hour overlap window)
+- event-time proximity checks (default 6-hour overlap window, applied only when both events have timestamps)
 
 When multiple sources describe the same incident, VigilantCore stores a single merged event and combines source attribution (for example: `Source A | Source B`).
 
