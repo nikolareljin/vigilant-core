@@ -35,6 +35,25 @@ class ConfigPersistenceTests(unittest.TestCase):
                 self.assertIn("ENABLE_DUCKDUCKGO_SEARCH=false", env_text)
                 self.assertIn("LOW_BANDWIDTH_MODE=true", env_text)
 
+    def test_save_config_persists_gguf_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_root = Path(tmpdir)
+            with patch("utils.config.config_dir", return_value=cfg_root):
+                cfg = AppConfig(
+                    enable_gguf_summarizer=True,
+                    gguf_model_path="/models/local.gguf",
+                    gguf_n_ctx=4096,
+                    gguf_max_tokens=320,
+                )
+                save_config(cfg)
+                dot_env = cfg_root / ".env"
+                self.assertTrue(dot_env.exists())
+                env_text = dot_env.read_text(encoding="utf-8")
+                self.assertIn("ENABLE_GGUF_SUMMARIZER=true", env_text)
+                self.assertIn("GGUF_MODEL_PATH=/models/local.gguf", env_text)
+                self.assertIn("GGUF_N_CTX=4096", env_text)
+                self.assertIn("GGUF_MAX_TOKENS=320", env_text)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
