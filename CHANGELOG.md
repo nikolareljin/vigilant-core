@@ -2,6 +2,19 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.5.0] - 2026-02-27
+
+### Added
+
+- **Event deduplication engine**: Added semantic overlap detection for alerts so duplicate/overlapping reports from multiple sources are merged into one canonical event.
+- **Deduplication documentation**: Added `docs/event-deduplication.md` with merge rules, source-priority behavior, and pipeline placement.
+- **Deduplication unit tests**: Added `tests/test_event_deduplication.py` for overlap merge and non-merge scenarios.
+
+### Changed
+
+- **Monitoring pipeline merge stage**: `MonitorEngine.gather_items()` now performs event-level deduplication after URL/location filtering and before parsing/persistence.
+- **Merged source attribution**: Canonical merged events now combine source names (`source_a | source_b`) while retaining a priority source kind for downstream confidence scoring.
+
 ## [0.4.0] - 2026-02-27
 
 ### Added

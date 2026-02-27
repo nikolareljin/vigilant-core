@@ -54,6 +54,7 @@ cd vigilant-core
 - **Source Preview UI/API**: Setup page preview and `/api/source-preview` endpoint show the inferred region and curated source URLs before saving
 - **AI Suggested Actions Toggle**: Enable/disable actionable suggestions shown next to the AI insight result from settings
 - **Unified Event Normalization**: All alerts are normalized into a consistent schema with `severity`, `confidence`, UTC-normalized timestamps, and structured location fields
+- **Event Deduplication Engine**: Overlapping alerts from different feeds/search providers are merged into one canonical event with aggregated source attribution
 - **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama
@@ -124,6 +125,18 @@ VigilantCore now uses a layered source-discovery approach for outage/extreme-eve
 5. **Discover RSS feeds** from candidate sites and merge with user-provided feeds and other search/API sources.
 
 This improves coverage in places where direct RSS feeds are inconsistent or unavailable.
+
+## Event Deduplication
+
+Before AI parsing and SQLite persistence, VigilantCore de-duplicates incoming alerts by:
+
+- URL-level duplicate suppression
+- semantic overlap checks (title/body token similarity)
+- event-time proximity checks (default 6-hour overlap window)
+
+When multiple sources describe the same incident, VigilantCore stores a single merged event and combines source attribution (for example: `Source A | Source B`).
+
+See `docs/event-deduplication.md` for detailed deduplication behavior.
 
 ### Coordinate-First Behavior
 
