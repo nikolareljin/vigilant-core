@@ -15,6 +15,12 @@ All notable changes to VigilantCore will be documented in this file.
 - **Monitoring pipeline merge stage**: `MonitorEngine.gather_items()` now performs event-level deduplication after URL/location filtering and before parsing/persistence.
 - **Merged source attribution**: Canonical merged events now combine source names (`source_a | source_b`) while retaining a priority source kind for downstream confidence scoring.
 
+### Fixed
+
+- **Untitled event false merges**: Missing-title alerts no longer create placeholder-based fingerprints that could merge unrelated events.
+- **Dedup performance scaling**: Semantic dedup now uses lightweight fingerprint/token indexing to reduce full list scans on larger fetch batches.
+- **Merged URL persistence safety**: Ingestion now carries merged URL metadata through processing and checks all merged URLs against SQLite before insert, preventing reinsertions when canonical URL selection differs across runs.
+
 ## [0.4.0] - 2026-02-27
 
 ### Added
