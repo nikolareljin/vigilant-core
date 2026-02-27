@@ -509,5 +509,5 @@ Full documentation is available in the `docs/` folder:
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and changes.  
+See [CHANGELOG.md](CHANGELOG.md) for release history and changes.
 Event schema details: [docs/event-normalization.md](docs/event-normalization.md)
