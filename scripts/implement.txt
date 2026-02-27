@@ -1,0 +1,11 @@
+Implement Issue:
+
+Steps:
+1. Read the issue title and description.
+2, decide if this is a major feature, minor feature, or a patch. Then create a release/X.Y.Z (from master branch), using the next Major/Minor or Patch semver version number for the new release.
+3. Modify the codebase accordingly.
+4. Create or update files as needed.
+5. Update the documentation (docs), CHANGELOG and/or README where needed.
+6. Do the testing before making commits with appropriate messages
+7. Commit, push the code changes.
+8. Open the PR for the new feature, add appropriate PR description and refer to the issue it resolves
