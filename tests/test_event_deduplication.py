@@ -114,6 +114,30 @@ class EventDeduplicationTests(unittest.TestCase):
         self.assertEqual(len(events), 2)
         self.assertTrue(all(event.merged_count == 1 for event in events))
 
+    def test_semantic_merge_requires_timestamps_for_window_check(self) -> None:
+        events = deduplicate_events(
+            [
+                {
+                    "url": "https://a.example.com/item/storm-1",
+                    "title": "Severe storm causes citywide outages",
+                    "snippet": "Emergency teams report widespread outages and road closures.",
+                    "published_at": None,
+                    "source": "Feed A",
+                    "source_kind": "rss",
+                },
+                {
+                    "url": "https://b.example.com/item/storm-2",
+                    "title": "Citywide outages reported after severe storm warning",
+                    "snippet": "Road closures continue while crews restore power.",
+                    "published_at": None,
+                    "source": "Feed B",
+                    "source_kind": "rss",
+                },
+            ]
+        )
+        self.assertEqual(len(events), 2)
+        self.assertTrue(all(event.merged_count == 1 for event in events))
+
 
 if __name__ == "__main__":
     unittest.main()

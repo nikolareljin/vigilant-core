@@ -116,8 +116,6 @@ def _is_overlap(
     if incoming.timestamp and current.timestamp:
         diff_seconds = abs((incoming.timestamp - current.timestamp).total_seconds())
         within_window = diff_seconds <= overlap_window_hours * 3600
-    else:
-        within_window = True
 
     if title_similarity >= 0.55 and shared_title_tokens >= 4 and within_window:
         return True
@@ -226,17 +224,20 @@ def deduplicate_events(
     """Merge duplicate or overlapping alerts from multiple sources."""
 
     aggregates: list[_AggregateEvent] = []
-    fingerprint_index: dict[str, list[_AggregateEvent]] = {}
-    token_index: dict[str, list[_AggregateEvent]] = {}
+    aggregate_by_id: dict[int, _AggregateEvent] = {}
+    fingerprint_index: dict[str, set[int]] = {}
+    token_index: dict[str, set[int]] = {}
 
     def _index_aggregate(entry: _AggregateEvent) -> None:
+        entry_id = id(entry)
+        aggregate_by_id[entry_id] = entry
         if entry.title_fingerprint:
-            fingerprint_index.setdefault(entry.title_fingerprint, []).append(entry)
+            fingerprint_index.setdefault(entry.title_fingerprint, set()).add(entry_id)
         index_tokens = sorted(entry.title_tokens)[:8]
         if not index_tokens:
             index_tokens = sorted(entry.body_tokens)[:8]
         for token in index_tokens:
-            token_index.setdefault(token, []).append(entry)
+            token_index.setdefault(token, set()).add(entry_id)
 
     for item in items:
         url = str(item.get("url") or "").strip()
@@ -252,14 +253,18 @@ def deduplicate_events(
         )
         candidate_pool: dict[int, _AggregateEvent] = {}
         if candidate.title_fingerprint:
-            for aggregate in fingerprint_index.get(candidate.title_fingerprint, []):
-                candidate_pool[id(aggregate)] = aggregate
+            for aggregate_id in fingerprint_index.get(candidate.title_fingerprint, set()):
+                aggregate = aggregate_by_id.get(aggregate_id)
+                if aggregate is not None:
+                    candidate_pool[aggregate_id] = aggregate
         lookup_tokens = sorted(candidate.title_tokens)[:8]
         if not lookup_tokens:
             lookup_tokens = sorted(candidate.body_tokens)[:8]
         for token in lookup_tokens:
-            for aggregate in token_index.get(token, []):
-                candidate_pool[id(aggregate)] = aggregate
+            for aggregate_id in token_index.get(token, set()):
+                aggregate = aggregate_by_id.get(aggregate_id)
+                if aggregate is not None:
+                    candidate_pool[aggregate_id] = aggregate
         merged = False
         for current in candidate_pool.values():
             if _is_overlap(candidate, current, overlap_window_hours):
