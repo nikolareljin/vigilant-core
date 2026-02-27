@@ -2,6 +2,26 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.6.0] - 2026-02-27
+
+### Added
+
+- **GGUF local summarizer integration**: Added `utils/gguf_summarizer.py` with optional GGUF-backed summarization for:
+  - alert digest summaries
+  - risk snapshot summaries
+- **Risk snapshot API**: Added `/api/risk-snapshot` endpoint in the web app for local risk-summary output.
+- **Config support for GGUF summarizer**: Added new configuration settings:
+  - `enable_gguf_summarizer`
+  - `gguf_model_path`
+  - `gguf_n_ctx`
+  - `gguf_max_tokens`
+- **Summarizer unit tests**: Added `tests/test_gguf_summarizer.py`.
+
+### Changed
+
+- **Insight fallback behavior**: Web/Qt insight generation now falls back to local GGUF/heuristic summaries when Ollama is unavailable and GGUF summarizer is enabled.
+- **Insight payload enrichment**: Insight responses now include `risk_snapshot`, `summary_engine`, and `summary_error` metadata.
+
 ## [0.4.0] - 2026-02-27
 
 ### Added

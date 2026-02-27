@@ -66,6 +66,10 @@ class AppConfig:
     enable_duckduckgo_search: bool = True
     enable_ai_suggestions: bool = True
     low_bandwidth_mode: bool = False
+    enable_gguf_summarizer: bool = False
+    gguf_model_path: Optional[str] = None
+    gguf_n_ctx: int = 2048
+    gguf_max_tokens: int = 220
 
 
 def config_dir() -> Path:
@@ -118,6 +122,12 @@ def load_config() -> AppConfig:
         cfg.low_bandwidth_mode = bool(
             (os.getenv("LOW_BANDWIDTH_MODE") or "false").lower() in ("1", "true", "yes")
         )
+        cfg.enable_gguf_summarizer = bool(
+            (os.getenv("ENABLE_GGUF_SUMMARIZER") or "false").lower() in ("1", "true", "yes")
+        )
+        cfg.gguf_model_path = os.getenv("GGUF_MODEL_PATH")
+        cfg.gguf_n_ctx = int(os.getenv("GGUF_N_CTX") or 2048)
+        cfg.gguf_max_tokens = int(os.getenv("GGUF_MAX_TOKENS") or 220)
         return cfg
     data = json.loads(cfg_path.read_text(encoding="utf-8"))
     load_dotenv(env_path())
@@ -149,6 +159,10 @@ def load_config() -> AppConfig:
         enable_duckduckgo_search=bool(data.get("enable_duckduckgo_search", True)),
         enable_ai_suggestions=bool(data.get("enable_ai_suggestions", True)),
         low_bandwidth_mode=bool(data.get("low_bandwidth_mode", False)),
+        enable_gguf_summarizer=bool(data.get("enable_gguf_summarizer", False)),
+        gguf_model_path=data.get("gguf_model_path"),
+        gguf_n_ctx=int(data.get("gguf_n_ctx", 2048)),
+        gguf_max_tokens=int(data.get("gguf_max_tokens", 220)),
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
     cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
@@ -170,6 +184,16 @@ def load_config() -> AppConfig:
         cfg.low_bandwidth_mode = (
             os.getenv("LOW_BANDWIDTH_MODE", "").lower() in ("1", "true", "yes")
         )
+    if os.getenv("ENABLE_GGUF_SUMMARIZER") is not None:
+        cfg.enable_gguf_summarizer = (
+            os.getenv("ENABLE_GGUF_SUMMARIZER", "").lower() in ("1", "true", "yes")
+        )
+    if os.getenv("GGUF_MODEL_PATH") is not None:
+        cfg.gguf_model_path = os.getenv("GGUF_MODEL_PATH")
+    if os.getenv("GGUF_N_CTX") is not None:
+        cfg.gguf_n_ctx = int(os.getenv("GGUF_N_CTX") or 2048)
+    if os.getenv("GGUF_MAX_TOKENS") is not None:
+        cfg.gguf_max_tokens = int(os.getenv("GGUF_MAX_TOKENS") or 220)
     return cfg
 
 
@@ -200,6 +224,10 @@ def save_config(config: AppConfig) -> None:
         "enable_duckduckgo_search": config.enable_duckduckgo_search,
         "enable_ai_suggestions": config.enable_ai_suggestions,
         "low_bandwidth_mode": config.low_bandwidth_mode,
+        "enable_gguf_summarizer": config.enable_gguf_summarizer,
+        "gguf_model_path": config.gguf_model_path,
+        "gguf_n_ctx": config.gguf_n_ctx,
+        "gguf_max_tokens": config.gguf_max_tokens,
     }
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
     env_lines = []
@@ -217,6 +245,14 @@ def save_config(config: AppConfig) -> None:
         env_lines.append("ENABLE_DUCKDUCKGO_SEARCH=false")
     if config.low_bandwidth_mode:
         env_lines.append("LOW_BANDWIDTH_MODE=true")
+    if config.enable_gguf_summarizer:
+        env_lines.append("ENABLE_GGUF_SUMMARIZER=true")
+    if config.gguf_model_path:
+        env_lines.append(f"GGUF_MODEL_PATH={config.gguf_model_path}")
+    if config.gguf_n_ctx != 2048:
+        env_lines.append(f"GGUF_N_CTX={config.gguf_n_ctx}")
+    if config.gguf_max_tokens != 220:
+        env_lines.append(f"GGUF_MAX_TOKENS={config.gguf_max_tokens}")
     dot_env = env_path()
     managed_keys = {
         "NEWS_API_KEY",
@@ -226,6 +262,10 @@ def save_config(config: AppConfig) -> None:
         "ENABLE_AI_SUGGESTIONS",
         "ENABLE_DUCKDUCKGO_SEARCH",
         "LOW_BANDWIDTH_MODE",
+        "ENABLE_GGUF_SUMMARIZER",
+        "GGUF_MODEL_PATH",
+        "GGUF_N_CTX",
+        "GGUF_MAX_TOKENS",
     }
     preserved_lines: list[str] = []
     if dot_env.exists():
