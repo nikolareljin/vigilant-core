@@ -2,6 +2,24 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.4.0] - 2026-02-27
+
+### Added
+
+- **Unified event normalization layer**: Added a shared normalization schema for all ingested alerts with:
+  - `severity`
+  - `confidence`
+  - normalized `timestamp_utc`
+  - structured location fields (`name`, `zip_code`, `latitude`, `longitude`)
+- **Normalization documentation**: Added `docs/event-normalization.md` describing schema and behavior.
+- **Normalization unit tests**: Added `tests/test_event_normalization.py` to verify schema output and timestamp normalization.
+
+### Changed
+
+- **Ingestion pipeline normalization**: Monitoring now normalizes event payloads before database insert and live alert emission.
+- **SQLite alert schema expansion**: Added persisted normalized columns (`severity`, `confidence`, `event_timestamp_utc`, `location_zip_code`, `location_latitude`, `location_longitude`) with backward-compatible migration checks.
+- **Alerts API payload enrichment**: `/api/alerts` now includes normalized event fields in the JSON response.
+
 ## [0.3.0] - 2026-02-24
 
 ### Added

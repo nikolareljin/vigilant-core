@@ -53,6 +53,7 @@ cd vigilant-core
 - **Coordinate-First Source Discovery**: Latitude/longitude alone can infer region and automatically seed relevant regional source URLs and localized Google News feeds
 - **Source Preview UI/API**: Setup page preview and `/api/source-preview` endpoint show the inferred region and curated source URLs before saving
 - **AI Suggested Actions Toggle**: Enable/disable actionable suggestions shown next to the AI insight result from settings
+- **Unified Event Normalization**: All alerts are normalized into a consistent schema with `severity`, `confidence`, UTC-normalized timestamps, and structured location fields
 - **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama
@@ -508,4 +509,5 @@ Full documentation is available in the `docs/` folder:
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for release history and changes.
+See [CHANGELOG.md](CHANGELOG.md) for release history and changes.  
+Event schema details: [docs/event-normalization.md](docs/event-normalization.md)

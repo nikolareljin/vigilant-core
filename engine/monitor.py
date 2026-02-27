@@ -18,6 +18,7 @@ import pgeocode
 from .parser import ImpactParser
 from utils import database
 from utils.config import AppConfig, config_dir
+from utils.event_normalization import normalize_event_payload
 from utils.sources import (
     build_all_feeds,
     build_comprehensive_local_feeds,
@@ -699,17 +700,36 @@ class MonitorEngine:
             if database.alert_exists(item.url):
                 continue
             parsed = await self._parser.parse_async(item.title, item.snippet)
+            normalized = normalize_event_payload(
+                source_event={
+                    "published_at": item.published_at,
+                    "source": item.source,
+                },
+                impact_score=parsed.impact_score,
+                is_relevant=parsed.is_relevant,
+                location_name=self.config.location_name,
+                zip_code=self.config.zip_code,
+                latitude=self.config.latitude,
+                longitude=self.config.longitude,
+            )
+            normalized_location = normalized.get("location", {})
             inserted = database.insert_alert(
                 url=item.url,
                 title=item.title,
                 snippet=item.snippet,
                 published_at=item.published_at,
                 source=item.source,
+                severity=normalized["severity"],
+                confidence=normalized["confidence"],
+                event_timestamp_utc=normalized["timestamp_utc"],
                 impact_score=parsed.impact_score,
                 predictive_outcome=parsed.predictive_outcome,
                 is_relevant=parsed.is_relevant,
                 subject=self.config.subject,
                 location_name=self.config.location_name,
+                location_zip_code=normalized_location.get("zip_code") or None,
+                location_latitude=normalized_location.get("latitude"),
+                location_longitude=normalized_location.get("longitude"),
             )
             if inserted:
                 new_count += 1
@@ -721,6 +741,10 @@ class MonitorEngine:
                             "snippet": item.snippet,
                             "published_at": item.published_at,
                             "source": item.source,
+                            "severity": normalized["severity"],
+                            "confidence": normalized["confidence"],
+                            "event_timestamp_utc": normalized["timestamp_utc"],
+                            "location": normalized_location,
                             "impact_score": parsed.impact_score,
                             "predictive_outcome": parsed.predictive_outcome,
                             "is_relevant": parsed.is_relevant,
