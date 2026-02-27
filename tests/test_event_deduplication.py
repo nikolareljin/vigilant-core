@@ -90,6 +90,30 @@ class EventDeduplicationTests(unittest.TestCase):
         self.assertEqual(merged.merged_count, 2)
         self.assertEqual(merged.source_kind, "news_api")
 
+    def test_empty_titles_do_not_force_false_merge(self) -> None:
+        events = deduplicate_events(
+            [
+                {
+                    "url": "https://a.example.com/item/untitled-1",
+                    "title": "",
+                    "snippet": "",
+                    "published_at": "2026-02-27T13:00:00Z",
+                    "source": "Feed A",
+                    "source_kind": "rss",
+                },
+                {
+                    "url": "https://b.example.com/item/untitled-2",
+                    "title": "",
+                    "snippet": "",
+                    "published_at": "2026-02-27T13:05:00Z",
+                    "source": "Feed B",
+                    "source_kind": "rss",
+                },
+            ]
+        )
+        self.assertEqual(len(events), 2)
+        self.assertTrue(all(event.merged_count == 1 for event in events))
+
 
 if __name__ == "__main__":
     unittest.main()

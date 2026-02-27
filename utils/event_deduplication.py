@@ -154,17 +154,19 @@ class _AggregateEvent:
         source_kind: str,
         published_at: str | None,
     ) -> "_AggregateEvent":
-        normalized_title = title or "(no title)"
+        raw_title = (title or "").strip()
+        normalized_title = raw_title or "(no title)"
         normalized_snippet = snippet or ""
+        body_text = f"{raw_title} {normalized_snippet}".strip()
         return cls(
             url=url,
             title=normalized_title,
             snippet=normalized_snippet,
             source_kind=source_kind or "unknown",
             timestamp=_to_utc_datetime(published_at),
-            title_tokens=_tokenize(normalized_title),
-            body_tokens=_tokenize(f"{normalized_title} {normalized_snippet}"),
-            title_fingerprint=_title_fingerprint(normalized_title),
+            title_tokens=_tokenize(raw_title),
+            body_tokens=_tokenize(body_text),
+            title_fingerprint=_title_fingerprint(raw_title),
             merged_urls=[url],
             merged_sources=[source or "Unknown"],
             merged_snippets=[normalized_snippet] if normalized_snippet else [],
@@ -224,6 +226,18 @@ def deduplicate_events(
     """Merge duplicate or overlapping alerts from multiple sources."""
 
     aggregates: list[_AggregateEvent] = []
+    fingerprint_index: dict[str, list[_AggregateEvent]] = {}
+    token_index: dict[str, list[_AggregateEvent]] = {}
+
+    def _index_aggregate(entry: _AggregateEvent) -> None:
+        if entry.title_fingerprint:
+            fingerprint_index.setdefault(entry.title_fingerprint, []).append(entry)
+        index_tokens = sorted(entry.title_tokens)[:8]
+        if not index_tokens:
+            index_tokens = sorted(entry.body_tokens)[:8]
+        for token in index_tokens:
+            token_index.setdefault(token, []).append(entry)
+
     for item in items:
         url = str(item.get("url") or "").strip()
         if not url:
@@ -236,12 +250,24 @@ def deduplicate_events(
             source_kind=str(item.get("source_kind") or "unknown"),
             published_at=item.get("published_at"),
         )
+        candidate_pool: dict[int, _AggregateEvent] = {}
+        if candidate.title_fingerprint:
+            for aggregate in fingerprint_index.get(candidate.title_fingerprint, []):
+                candidate_pool[id(aggregate)] = aggregate
+        lookup_tokens = sorted(candidate.title_tokens)[:8]
+        if not lookup_tokens:
+            lookup_tokens = sorted(candidate.body_tokens)[:8]
+        for token in lookup_tokens:
+            for aggregate in token_index.get(token, []):
+                candidate_pool[id(aggregate)] = aggregate
         merged = False
-        for current in aggregates:
+        for current in candidate_pool.values():
             if _is_overlap(candidate, current, overlap_window_hours):
                 current.merge(candidate)
+                _index_aggregate(current)
                 merged = True
                 break
         if not merged:
             aggregates.append(candidate)
+            _index_aggregate(candidate)
     return [entry.to_event() for entry in aggregates]

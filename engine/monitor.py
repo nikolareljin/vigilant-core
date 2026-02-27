@@ -42,6 +42,7 @@ class AlertItem:
     published_at: Optional[str]
     source: str
     source_kind: str = "unknown"
+    merged_urls: tuple[str, ...] = ()
 
 
 class MonitorEngine:
@@ -696,17 +697,27 @@ class MonitorEngine:
                 for item in filtered_items
             ]
         )
-        unique_items = [
-            AlertItem(
-                url=event.url,
-                title=event.title,
-                snippet=event.snippet,
-                published_at=event.published_at,
-                source=event.source,
-                source_kind=event.source_kind,
+        unique_items: List[AlertItem] = []
+        for event in merged_events:
+            merged_urls = tuple(dict.fromkeys(event.merged_urls)) if event.merged_urls else (event.url,)
+            canonical_url = None
+            for candidate in sorted(merged_urls):
+                if database.alert_exists(candidate):
+                    canonical_url = candidate
+                    break
+            if canonical_url is None:
+                canonical_url = min((url for url in merged_urls if url), default=event.url)
+            unique_items.append(
+                AlertItem(
+                    url=canonical_url,
+                    title=event.title,
+                    snippet=event.snippet,
+                    published_at=event.published_at,
+                    source=event.source,
+                    source_kind=event.source_kind,
+                    merged_urls=merged_urls,
+                )
             )
-            for event in merged_events
-        ]
         logger.info(
             "Items after URL/location filter: %d | after event dedup: %d",
             len(filtered_items),
@@ -735,7 +746,8 @@ class MonitorEngine:
         total = 0
         for item in items:
             total += 1
-            if database.alert_exists(item.url):
+            dedup_urls = item.merged_urls or (item.url,)
+            if any(database.alert_exists(candidate) for candidate in dedup_urls):
                 continue
             parsed = await self._parser.parse_async(item.title, item.snippet)
             normalized = normalize_event_payload(
