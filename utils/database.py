@@ -11,6 +11,14 @@ from .config import data_dir
 
 
 DB_NAME = "vigilantcore.db"
+ALERT_MIGRATION_COLUMNS = {
+    "severity": "TEXT",
+    "confidence": "REAL",
+    "event_timestamp_utc": "TEXT",
+    "location_zip_code": "TEXT",
+    "location_latitude": "REAL",
+    "location_longitude": "REAL",
+}
 
 
 def db_path() -> Path:
@@ -37,6 +45,12 @@ def init_db() -> None:
                 snippet TEXT,
                 published_at TEXT,
                 source TEXT,
+                severity TEXT,
+                confidence REAL,
+                event_timestamp_utc TEXT,
+                location_zip_code TEXT,
+                location_latitude REAL,
+                location_longitude REAL,
                 impact_score INTEGER,
                 predictive_outcome TEXT,
                 is_relevant INTEGER,
@@ -52,6 +66,20 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_alerts_impact ON alerts(impact_score)"
         )
+        # Backward-compatible schema upgrades for existing databases.
+        for column, type_sql in ALERT_MIGRATION_COLUMNS.items():
+            _ensure_alert_column(conn, column, type_sql)
+
+
+def _ensure_alert_column(conn: sqlite3.Connection, column: str, type_sql: str) -> None:
+    expected_type = ALERT_MIGRATION_COLUMNS.get(column)
+    if expected_type is None or expected_type != type_sql:
+        raise ValueError(f"Unsafe migration column definition: {column} {type_sql}")
+    cur = conn.execute("PRAGMA table_info(alerts)")
+    existing = {row["name"] for row in cur.fetchall()}
+    if column in existing:
+        return
+    conn.execute(f"ALTER TABLE alerts ADD COLUMN {column} {type_sql}")
 
 
 def hash_url(url: str) -> str:
@@ -74,11 +102,17 @@ def insert_alert(
     snippet: str,
     published_at: Optional[str],
     source: str,
+    severity: str,
+    confidence: float,
+    event_timestamp_utc: str,
     impact_score: int,
     predictive_outcome: str,
     is_relevant: bool,
     subject: str,
     location_name: str,
+    location_zip_code: Optional[str] = None,
+    location_latitude: Optional[float] = None,
+    location_longitude: Optional[float] = None,
 ) -> bool:
     url_hash = hash_url(url)
     try:
@@ -87,8 +121,10 @@ def insert_alert(
                 """
                 INSERT INTO alerts (
                     url, url_hash, title, snippet, published_at, source,
+                    severity, confidence, event_timestamp_utc,
+                    location_zip_code, location_latitude, location_longitude,
                     impact_score, predictive_outcome, is_relevant, subject, location_name
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     url,
@@ -97,6 +133,12 @@ def insert_alert(
                     snippet,
                     published_at,
                     source,
+                    severity,
+                    confidence,
+                    event_timestamp_utc,
+                    location_zip_code,
+                    location_latitude,
+                    location_longitude,
                     impact_score,
                     predictive_outcome,
                     int(is_relevant),
@@ -114,6 +156,8 @@ def fetch_recent(limit: int = 200) -> List[sqlite3.Row]:
         cur = conn.execute(
             """
             SELECT id, url, title, snippet, published_at, source,
+                   severity, confidence, event_timestamp_utc,
+                   location_zip_code, location_latitude, location_longitude,
                    impact_score, predictive_outcome, is_relevant, subject, location_name,
                    created_at
             FROM alerts
