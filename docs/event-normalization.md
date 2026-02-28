@@ -23,3 +23,4 @@ Each event includes:
 - Confidence is estimated from source type + impact + relevance and clamped to `[0.0, 1.0]`.
 - Missing location text fields are normalized to empty strings, while missing coordinates remain `null`.
 - Normalized event fields are persisted in SQLite and returned from `/api/alerts`.
+- Ingestion now runs event deduplication before normalization so overlapping source reports become one canonical normalized event.

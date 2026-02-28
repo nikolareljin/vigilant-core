@@ -18,6 +18,7 @@ import pgeocode
 from .parser import ImpactParser
 from utils import database
 from utils.config import AppConfig, config_dir
+from utils.event_deduplication import deduplicate_events
 from utils.event_normalization import normalize_event_payload
 from utils.sources import (
     build_all_feeds,
@@ -41,6 +42,7 @@ class AlertItem:
     published_at: Optional[str]
     source: str
     source_kind: str = "unknown"
+    merged_urls: tuple[str, ...] = ()
 
 
 class MonitorEngine:
@@ -69,6 +71,19 @@ class MonitorEngine:
             prefer_light_model=config.prefer_light_model,
         )
         self.model_name = self._parser.current_model()
+
+    @staticmethod
+    def _url_exists_cached(
+        url: str,
+        cache: Dict[str, bool],
+    ) -> bool:
+        if not url:
+            return False
+        exists = cache.get(url)
+        if exists is None:
+            exists = database.alert_exists(url)
+            cache[url] = exists
+        return exists
 
     def _location_context(self) -> str:
         if self.config.relax_location_filter:
@@ -673,15 +688,49 @@ class MonitorEngine:
                 combined.extend(group)
         logger.info("Fetched %d raw items before filtering", len(combined))
         seen = set()
-        unique_items = []
+        filtered_items = []
         for item in combined:
             if item.url in seen:
                 continue
             if not self._matches_location(item):
                 continue
             seen.add(item.url)
-            unique_items.append(item)
-        logger.info("Items after de-dup/location filter: %d", len(unique_items))
+            filtered_items.append(item)
+
+        merged_events = deduplicate_events(
+            [
+                {
+                    "url": item.url,
+                    "title": item.title,
+                    "snippet": item.snippet,
+                    "published_at": item.published_at,
+                    "source": item.source,
+                    "source_kind": item.source_kind,
+                }
+                for item in filtered_items
+            ]
+        )
+
+        unique_items: List[AlertItem] = []
+        for event in merged_events:
+            merged_urls = tuple(dict.fromkeys(event.merged_urls)) if event.merged_urls else (event.url,)
+            canonical_url = min((url for url in merged_urls if url), default=event.url)
+            unique_items.append(
+                AlertItem(
+                    url=canonical_url,
+                    title=event.title,
+                    snippet=event.snippet,
+                    published_at=event.published_at,
+                    source=event.source,
+                    source_kind=event.source_kind,
+                    merged_urls=merged_urls,
+                )
+            )
+        logger.info(
+            "Items after URL/location filter: %d | after event dedup: %d",
+            len(filtered_items),
+            len(unique_items),
+        )
         return unique_items
 
     def _build_google_news_feed(self) -> Optional[str]:
@@ -703,9 +752,12 @@ class MonitorEngine:
     async def process_items(self, items: Iterable[AlertItem]) -> int:
         new_count = 0
         total = 0
+        existing_url_cache: Dict[str, bool] = {}
+
         for item in items:
             total += 1
-            if database.alert_exists(item.url):
+            dedup_urls = item.merged_urls or (item.url,)
+            if any(self._url_exists_cached(candidate, existing_url_cache) for candidate in dedup_urls):
                 continue
             parsed = await self._parser.parse_async(item.title, item.snippet)
             normalized = normalize_event_payload(
