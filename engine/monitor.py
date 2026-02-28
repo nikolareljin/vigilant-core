@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,7 @@ from math import asin, cos, radians, sin, sqrt
 from datetime import datetime, timedelta
 from time import perf_counter
 from typing import Callable, Dict, Iterable, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import feedparser
 import httpx
@@ -34,6 +36,18 @@ from utils.sources import (
 )
 
 logger = logging.getLogger(__name__)
+SENSITIVE_QUERY_PARAMS = {
+    "key",
+    "api_key",
+    "apikey",
+    "token",
+    "access_token",
+    "refresh_token",
+    "cx",
+    "client_secret",
+    "subscription-key",
+    "ocp-apim-subscription-key",
+}
 
 SOURCE_HEALTH_CATALOG = {
     "rss": "RSS feeds",
@@ -160,8 +174,60 @@ class MonitorEngine:
                 entry["last_error_utc"] = None
             else:
                 entry["error_count"] = int(entry.get("error_count", 0)) + 1
-                entry["last_error"] = (str(error or "Fetch failed")[:240]).strip() or "Fetch failed"
+                safe_error = self._sanitize_error_message(error or "Fetch failed")
+                entry["last_error"] = safe_error[:240].strip() or "Fetch failed"
                 entry["last_error_utc"] = now_iso
+
+    def _mark_source_skipped(self, source_key: str) -> None:
+        with self._source_health_lock:
+            entry = self._source_health.setdefault(
+                source_key,
+                {
+                    "source_key": source_key,
+                    "source_name": SOURCE_HEALTH_CATALOG.get(source_key, source_key),
+                    "enabled": self._is_source_enabled(source_key),
+                    "last_attempt_utc": None,
+                    "last_successful_fetch_utc": None,
+                    "last_error_utc": None,
+                    "last_error": None,
+                    "error_count": 0,
+                    "attempt_count": 0,
+                    "success_count": 0,
+                    "last_latency_ms": None,
+                    "last_item_count": 0,
+                },
+            )
+            entry["enabled"] = self._is_source_enabled(source_key)
+
+    def _sanitize_error_message(self, error: object) -> str:
+        message = str(error or "Fetch failed")
+        if not message:
+            return "Fetch failed"
+
+        def _replace(match: re.Match[str]) -> str:
+            candidate = match.group(0)
+            if "://" not in candidate:
+                return candidate
+            try:
+                split = urlsplit(candidate)
+                if not split.query:
+                    return candidate
+                redacted_pairs = []
+                changed = False
+                for key, value in parse_qsl(split.query, keep_blank_values=True):
+                    if key.lower() in SENSITIVE_QUERY_PARAMS:
+                        redacted_pairs.append((key, "[REDACTED]"))
+                        changed = True
+                    else:
+                        redacted_pairs.append((key, value))
+                if not changed:
+                    return candidate
+                safe_query = urlencode(redacted_pairs, doseq=True)
+                return urlunsplit((split.scheme, split.netloc, split.path, safe_query, split.fragment))
+            except Exception:
+                return candidate
+
+        return re.sub(r"https?://[^\s)]+", _replace, message)
 
     def get_source_health_snapshot(self) -> List[Dict[str, object]]:
         with self._source_health_lock:
@@ -395,7 +461,7 @@ class MonitorEngine:
         started = perf_counter()
         items: List[AlertItem] = []
         if not self._is_source_enabled(source_key):
-            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
+            self._mark_source_skipped(source_key)
             return items
         feed_urls = feed_urls or ensure_seed_feeds(self.config.rss_feeds)
         if self._is_low_bandwidth() and len(feed_urls) > 40:
@@ -455,7 +521,7 @@ class MonitorEngine:
         started = perf_counter()
         items: List[AlertItem] = []
         if not self._is_source_enabled(source_key):
-            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
+            self._mark_source_skipped(source_key)
             return items
         window_hours = max(1, int(self.config.news_time_window_hours or 6))
         since = (datetime.utcnow() - timedelta(hours=window_hours)).isoformat() + "Z"
@@ -585,6 +651,12 @@ class MonitorEngine:
                         )
                     )
                 if items:
+                    self._record_source_fetch(
+                        source_key,
+                        success=True,
+                        latency_ms=(perf_counter() - started) * 1000,
+                        item_count=len(items),
+                    )
                     return items
             except Exception as exc:
                 logger.exception("NewsAPI top-headlines request failed")
@@ -629,7 +701,7 @@ class MonitorEngine:
         started = perf_counter()
         items: List[AlertItem] = []
         if not self._is_source_enabled(source_key):
-            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
+            self._mark_source_skipped(source_key)
             return items
         query = self._limit_query(self._build_search_query())
         if not query:
@@ -683,7 +755,7 @@ class MonitorEngine:
         source_key = "duckduckgo"
         started = perf_counter()
         if not self._is_source_enabled(source_key):
-            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
+            self._mark_source_skipped(source_key)
             return []
         query = self._limit_query(self._build_search_query())
         if not query:
@@ -727,7 +799,7 @@ class MonitorEngine:
 
         # Only run if we have location info
         if not self._is_source_enabled(source_key):
-            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
+            self._mark_source_skipped(source_key)
             return items
 
         try:
@@ -776,7 +848,7 @@ class MonitorEngine:
         started = perf_counter()
         items: List[AlertItem] = []
         if not self._is_source_enabled(source_key):
-            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
+            self._mark_source_skipped(source_key)
             return items
         query = self._limit_query(self._build_search_query())
         if not query:
@@ -882,11 +954,13 @@ class MonitorEngine:
                 emergency_items = await self.fetch_emergency_items()
                 combined.extend(emergency_items)
             if not combined:
-                tasks = [
-                    self.fetch_google_cse_items(),
-                    self.fetch_bing_items(),
-                    self.fetch_duckduckgo_items(),
-                ]
+                tasks = []
+                if self._is_source_enabled("google_cse"):
+                    tasks.append(self.fetch_google_cse_items())
+                if self._is_source_enabled("bing_search"):
+                    tasks.append(self.fetch_bing_items())
+                if self._is_source_enabled("duckduckgo"):
+                    tasks.append(self.fetch_duckduckgo_items())
                 if not self.config.disable_rss_fetch:
                     tasks.insert(0, self.fetch_rss_items(feed_urls))
                 results = await asyncio.gather(*tasks)
@@ -894,11 +968,13 @@ class MonitorEngine:
                 for group in results:
                     combined.extend(group)
         else:
-            tasks = [
-                self.fetch_google_cse_items(),
-                self.fetch_bing_items(),
-                self.fetch_duckduckgo_items(),
-            ]
+            tasks = []
+            if self._is_source_enabled("google_cse"):
+                tasks.append(self.fetch_google_cse_items())
+            if self._is_source_enabled("bing_search"):
+                tasks.append(self.fetch_bing_items())
+            if self._is_source_enabled("duckduckgo"):
+                tasks.append(self.fetch_duckduckgo_items())
             if not self.config.disable_rss_fetch:
                 tasks.insert(0, self.fetch_rss_items(feed_urls))
             # Add emergency search if location info is available

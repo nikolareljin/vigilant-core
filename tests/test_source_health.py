@@ -61,6 +61,30 @@ class SourceHealthTests(unittest.TestCase):
         self.assertIsNotNone(after_failure["last_error_utc"])
         self.assertIsNotNone(after_failure["last_successful_fetch_utc"])
 
+    def test_mark_source_skipped_does_not_increment_attempts(self) -> None:
+        engine = self._build_engine(enable_duckduckgo_search=False)
+        before = {entry["source_key"]: entry for entry in engine.get_source_health_snapshot()}["duckduckgo"]
+        self.assertEqual(before["attempt_count"], 0)
+        self.assertEqual(before["success_count"], 0)
+
+        engine._mark_source_skipped("duckduckgo")
+        after = {entry["source_key"]: entry for entry in engine.get_source_health_snapshot()}["duckduckgo"]
+        self.assertEqual(after["attempt_count"], 0)
+        self.assertEqual(after["success_count"], 0)
+        self.assertIsNone(after["last_attempt_utc"])
+
+    def test_sanitize_error_message_redacts_sensitive_query_params(self) -> None:
+        engine = self._build_engine()
+        raw = (
+            "Client error '403 Forbidden' for url "
+            "'https://www.googleapis.com/customsearch/v1?key=abc123&cx=def456&q=test'"
+        )
+        safe = engine._sanitize_error_message(raw)
+        self.assertNotIn("abc123", safe)
+        self.assertNotIn("def456", safe)
+        self.assertIn("key=%5BREDACTED%5D", safe)
+        self.assertIn("cx=%5BREDACTED%5D", safe)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
