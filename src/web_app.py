@@ -169,6 +169,42 @@ DASHBOARD_TEMPLATE = """
       margin: 20px 0;
       display: none;
     }
+    .source-health-card {
+      margin-top: 16px;
+      background: #ffffff;
+      border-radius: 10px;
+      border: 1px solid #d9dfef;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    }
+    .source-health-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: #eef3ff;
+      border-bottom: 1px solid #d9dfef;
+    }
+    .source-health-title {
+      font-weight: 700;
+      color: #1d2a52;
+    }
+    .source-health-updated {
+      color: #5d6780;
+      font-size: 0.82em;
+    }
+    #sourceHealthTable {
+      width: 100%;
+      margin-top: 0;
+    }
+    #sourceHealthTable th, #sourceHealthTable td {
+      padding: 8px 10px;
+      font-size: 0.92em;
+    }
+    .health-disabled {
+      color: #6b7280;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -184,6 +220,28 @@ DASHBOARD_TEMPLATE = """
       <a class="button" href="/api/alerts" target="_blank">Raw JSON</a>
     </div>
   </header>
+
+  <div class="source-health-card">
+    <div class="source-health-head">
+      <div class="source-health-title">Source Health Indicators</div>
+      <div class="source-health-updated" id="sourceHealthUpdated">Updated: --</div>
+    </div>
+    <table id="sourceHealthTable">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Enabled</th>
+          <th>Last Success</th>
+          <th>Errors</th>
+          <th>Latency (ms)</th>
+          <th>Items</th>
+        </tr>
+      </thead>
+      <tbody id="sourceHealthBody">
+        <tr><td colspan="6">Loading source health...</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <!-- Monitoring Question Insight Card -->
   <div id="insightCard" class="insight-card">
@@ -332,16 +390,58 @@ async function loadFeed() {
   });
 }
 
+function formatHealthTimestamp(value) {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+async function loadSourceHealth() {
+  const tbody = document.getElementById('sourceHealthBody');
+  const updated = document.getElementById('sourceHealthUpdated');
+  try {
+    const res = await fetch('/api/source-health');
+    const data = await res.json();
+    const rows = Array.isArray(data.sources) ? data.sources : [];
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6">Source health is available after monitoring starts.</td></tr>';
+      updated.textContent = 'Updated: ' + new Date().toLocaleTimeString();
+      return;
+    }
+    tbody.innerHTML = '';
+    for (const source of rows) {
+      const tr = document.createElement('tr');
+      const enabled = source.enabled ? 'Yes' : 'No';
+      tr.innerHTML = `
+        <td>${source.source_name || source.source_key || ''}</td>
+        <td class="${source.enabled ? '' : 'health-disabled'}">${enabled}</td>
+        <td>${formatHealthTimestamp(source.last_successful_fetch_utc)}</td>
+        <td>${source.error_count ?? 0}</td>
+        <td>${source.last_latency_ms ?? '--'}</td>
+        <td>${source.last_item_count ?? 0}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    updated.textContent = 'Updated: ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6">Could not fetch source health.</td></tr>';
+    updated.textContent = 'Updated: error';
+  }
+}
+
 // Config from server
 const insightRefreshMinutes = {{ insight_refresh_minutes }};
 
 // Initial load
 loadInsight();
 loadFeed();
+loadSourceHealth();
 
 // Refresh periodically
 setInterval(loadFeed, 30000);  // Alerts every 30 seconds
 setInterval(loadInsight, insightRefreshMinutes * 60 * 1000);  // Insight per config
+setInterval(loadSourceHealth, 30000);  // Source health every 30 seconds
 
 document.getElementById('prevBtn').addEventListener('click', () => {
   if (page > 1) {
@@ -702,6 +802,11 @@ class MonitorService:
         if self._engine:
             self._engine.stop()
 
+    def source_health(self) -> list[dict]:
+        if not self._engine:
+            return []
+        return self._engine.get_source_health_snapshot()
+
 
 app = Flask(__name__)
 monitor_service = MonitorService()
@@ -1037,6 +1142,11 @@ def api_alerts() -> str:
             }
         )
     return jsonify({"alerts": alerts, "page": page, "limit": limit})
+
+
+@app.route("/api/source-health")
+def api_source_health() -> str:
+    return jsonify({"sources": monitor_service.source_health()})
 
 
 @app.route("/api/source-preview")

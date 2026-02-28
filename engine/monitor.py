@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from math import asin, cos, radians, sin, sqrt
 from datetime import datetime, timedelta
+from time import perf_counter
 from typing import Callable, Dict, Iterable, List, Optional
 
 import feedparser
@@ -32,6 +34,15 @@ from utils.sources import (
 )
 
 logger = logging.getLogger(__name__)
+
+SOURCE_HEALTH_CATALOG = {
+    "rss": "RSS feeds",
+    "news_api": "NewsAPI",
+    "google_cse": "Google CSE",
+    "bing_search": "Bing Search",
+    "duckduckgo": "DuckDuckGo",
+    "emergency_search": "Emergency Search",
+}
 
 
 @dataclass
@@ -59,6 +70,9 @@ class MonitorEngine:
         self._local_source_feeds: Optional[List[str]] = None
         self._social_feeds: Optional[List[str]] = None
         self._seed_feeds: Optional[List[str]] = None
+        self._source_health_lock = threading.Lock()
+        self._source_health: Dict[str, Dict[str, object]] = {}
+        self._initialize_source_health()
         if not logging.getLogger().handlers:
             logging.basicConfig(
                 level=logging.INFO,
@@ -72,6 +86,87 @@ class MonitorEngine:
             prefer_light_model=config.prefer_light_model,
         )
         self.model_name = self._parser.current_model()
+
+    def _is_source_enabled(self, source_key: str) -> bool:
+        if source_key == "rss":
+            return not self.config.disable_rss_fetch
+        if source_key == "news_api":
+            return bool(self.config.news_api_key)
+        if source_key == "google_cse":
+            return bool(self.config.google_cse_api_key and self.config.google_cse_cx)
+        if source_key == "bing_search":
+            return bool(self.config.bing_search_key)
+        if source_key == "duckduckgo":
+            return bool(self.config.enable_duckduckgo_search)
+        if source_key == "emergency_search":
+            return bool(self.config.zip_code or self.config.location_name)
+        return True
+
+    def _initialize_source_health(self) -> None:
+        with self._source_health_lock:
+            for source_key, display_name in SOURCE_HEALTH_CATALOG.items():
+                self._source_health[source_key] = {
+                    "source_key": source_key,
+                    "source_name": display_name,
+                    "enabled": self._is_source_enabled(source_key),
+                    "last_attempt_utc": None,
+                    "last_successful_fetch_utc": None,
+                    "last_error_utc": None,
+                    "last_error": None,
+                    "error_count": 0,
+                    "attempt_count": 0,
+                    "success_count": 0,
+                    "last_latency_ms": None,
+                    "last_item_count": 0,
+                }
+
+    def _record_source_fetch(
+        self,
+        source_key: str,
+        *,
+        success: bool,
+        latency_ms: float,
+        item_count: int = 0,
+        error: str | None = None,
+    ) -> None:
+        now_iso = datetime.utcnow().isoformat() + "Z"
+        with self._source_health_lock:
+            entry = self._source_health.setdefault(
+                source_key,
+                {
+                    "source_key": source_key,
+                    "source_name": SOURCE_HEALTH_CATALOG.get(source_key, source_key),
+                    "enabled": self._is_source_enabled(source_key),
+                    "last_attempt_utc": None,
+                    "last_successful_fetch_utc": None,
+                    "last_error_utc": None,
+                    "last_error": None,
+                    "error_count": 0,
+                    "attempt_count": 0,
+                    "success_count": 0,
+                    "last_latency_ms": None,
+                    "last_item_count": 0,
+                },
+            )
+            entry["enabled"] = self._is_source_enabled(source_key)
+            entry["last_attempt_utc"] = now_iso
+            entry["last_latency_ms"] = round(max(0.0, float(latency_ms)), 2)
+            entry["last_item_count"] = max(0, int(item_count))
+            entry["attempt_count"] = int(entry.get("attempt_count", 0)) + 1
+            if success:
+                entry["success_count"] = int(entry.get("success_count", 0)) + 1
+                entry["last_successful_fetch_utc"] = now_iso
+                entry["last_error"] = None
+                entry["last_error_utc"] = None
+            else:
+                entry["error_count"] = int(entry.get("error_count", 0)) + 1
+                entry["last_error"] = (str(error or "Fetch failed")[:240]).strip() or "Fetch failed"
+                entry["last_error_utc"] = now_iso
+
+    def get_source_health_snapshot(self) -> List[Dict[str, object]]:
+        with self._source_health_lock:
+            keys = sorted(self._source_health.keys())
+            return [{**self._source_health[key]} for key in keys]
 
     @staticmethod
     def _url_exists_cached(
@@ -296,11 +391,17 @@ class MonitorEngine:
         return any(kw in haystack for kw in keywords)
 
     async def fetch_rss_items(self, feed_urls: Optional[List[str]] = None) -> List[AlertItem]:
+        source_key = "rss"
+        started = perf_counter()
         items: List[AlertItem] = []
+        if not self._is_source_enabled(source_key):
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
+            return items
         feed_urls = feed_urls or ensure_seed_feeds(self.config.rss_feeds)
         if self._is_low_bandwidth() and len(feed_urls) > 40:
             feed_urls = feed_urls[:40]
         bad_feeds: List[str] = []
+        fetch_errors = 0
         async with httpx.AsyncClient(timeout=12 if self._is_low_bandwidth() else 20) as client:
             for feed_url in feed_urls:
                 try:
@@ -311,6 +412,7 @@ class MonitorEngine:
                     resp.raise_for_status()
                     parsed = await asyncio.to_thread(feedparser.parse, resp.text)
                 except Exception:
+                    fetch_errors += 1
                     continue
                 for entry in parsed.entries:
                     url = entry.get("link")
@@ -335,11 +437,25 @@ class MonitorEngine:
                 invalid_cached[feed_url] = {"checked_at": now}
             cache["invalid_feeds"] = invalid_cached
             self._save_feed_cache(cache)
+        latency_ms = (perf_counter() - started) * 1000
+        if fetch_errors > 0 and len(items) == 0 and len(feed_urls) > 0:
+            self._record_source_fetch(
+                source_key,
+                success=False,
+                latency_ms=latency_ms,
+                item_count=0,
+                error=f"RSS fetch failed for {fetch_errors} feed(s)",
+            )
+        else:
+            self._record_source_fetch(source_key, success=True, latency_ms=latency_ms, item_count=len(items))
         return items
 
     async def fetch_news_api_items(self) -> List[AlertItem]:
+        source_key = "news_api"
+        started = perf_counter()
         items: List[AlertItem] = []
-        if not self.config.news_api_key:
+        if not self._is_source_enabled(source_key):
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return items
         window_hours = max(1, int(self.config.news_time_window_hours or 6))
         since = (datetime.utcnow() - timedelta(hours=window_hours)).isoformat() + "Z"
@@ -389,11 +505,25 @@ class MonitorEngine:
                 )
             try:
                 payload = await _query_news_api(query)
-            except Exception:
+            except Exception as exc:
                 logger.exception("NewsAPI request failed")
+                self._record_source_fetch(
+                    source_key,
+                    success=False,
+                    latency_ms=(perf_counter() - started) * 1000,
+                    item_count=0,
+                    error=str(exc),
+                )
                 return items
             if payload.get("status") != "ok":
                 logger.info("NewsAPI error: %s", payload.get("message"))
+                self._record_source_fetch(
+                    source_key,
+                    success=False,
+                    latency_ms=(perf_counter() - started) * 1000,
+                    item_count=0,
+                    error=str(payload.get("message") or "NewsAPI returned non-ok status"),
+                )
                 return items
             articles = payload.get("articles", []) or []
             if not articles:
@@ -412,8 +542,14 @@ class MonitorEngine:
                         source=article.get("source", {}).get("name", "News API"),
                         source_kind="news_api",
                     )
-                )
+                    )
             if items:
+                self._record_source_fetch(
+                    source_key,
+                    success=True,
+                    latency_ms=(perf_counter() - started) * 1000,
+                    item_count=len(items),
+                )
                 return items
         # Fallback: try top-headlines with subject only (country=us).
         if self.config.subject:
@@ -450,8 +586,22 @@ class MonitorEngine:
                     )
                 if items:
                     return items
-            except Exception:
+            except Exception as exc:
                 logger.exception("NewsAPI top-headlines request failed")
+                self._record_source_fetch(
+                    source_key,
+                    success=False,
+                    latency_ms=(perf_counter() - started) * 1000,
+                    item_count=0,
+                    error=str(exc),
+                )
+                return items
+        self._record_source_fetch(
+            source_key,
+            success=True,
+            latency_ms=(perf_counter() - started) * 1000,
+            item_count=len(items),
+        )
         return items
 
     def _build_search_query(self) -> str:
@@ -475,11 +625,15 @@ class MonitorEngine:
         return trimmed.rstrip()
 
     async def fetch_bing_items(self) -> List[AlertItem]:
+        source_key = "bing_search"
+        started = perf_counter()
         items: List[AlertItem] = []
-        if not self.config.bing_search_key:
+        if not self._is_source_enabled(source_key):
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return items
         query = self._limit_query(self._build_search_query())
         if not query:
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return items
         endpoint = self.config.bing_search_endpoint or "https://api.bing.microsoft.com/v7.0/search"
         params = {
@@ -494,7 +648,14 @@ class MonitorEngine:
                 resp = await client.get(endpoint, params=params, headers=headers)
                 resp.raise_for_status()
                 payload = resp.json()
-            except Exception:
+            except Exception as exc:
+                self._record_source_fetch(
+                    source_key,
+                    success=False,
+                    latency_ms=(perf_counter() - started) * 1000,
+                    item_count=0,
+                    error=str(exc),
+                )
                 return items
         for entry in payload.get("webPages", {}).get("value", []) or []:
             link = entry.get("url")
@@ -510,34 +671,63 @@ class MonitorEngine:
                     source_kind="bing_search",
                 )
             )
+        self._record_source_fetch(
+            source_key,
+            success=True,
+            latency_ms=(perf_counter() - started) * 1000,
+            item_count=len(items),
+        )
         return items
 
     async def fetch_duckduckgo_items(self) -> List[AlertItem]:
-        if not self.config.enable_duckduckgo_search:
+        source_key = "duckduckgo"
+        started = perf_counter()
+        if not self._is_source_enabled(source_key):
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return []
         query = self._limit_query(self._build_search_query())
         if not query:
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return []
         items: List[AlertItem] = []
-        for result in search_duckduckgo_results(query, max_results=8 if self._is_low_bandwidth() else 20):
-            items.append(
-                AlertItem(
-                    url=result.url,
-                    title=result.title,
-                    snippet=result.snippet,
-                    published_at=None,
-                    source="DuckDuckGo",
-                    source_kind="duckduckgo",
+        try:
+            for result in search_duckduckgo_results(query, max_results=8 if self._is_low_bandwidth() else 20):
+                items.append(
+                    AlertItem(
+                        url=result.url,
+                        title=result.title,
+                        snippet=result.snippet,
+                        published_at=None,
+                        source="DuckDuckGo",
+                        source_kind="duckduckgo",
+                    )
                 )
+        except Exception as exc:
+            self._record_source_fetch(
+                source_key,
+                success=False,
+                latency_ms=(perf_counter() - started) * 1000,
+                item_count=0,
+                error=str(exc),
             )
+            return []
+        self._record_source_fetch(
+            source_key,
+            success=True,
+            latency_ms=(perf_counter() - started) * 1000,
+            item_count=len(items),
+        )
         return items
 
     async def fetch_emergency_items(self) -> List[AlertItem]:
         """Fetch emergency-related search results for the subject and location."""
+        source_key = "emergency_search"
+        started = perf_counter()
         items: List[AlertItem] = []
 
         # Only run if we have location info
-        if not (self.config.zip_code or self.config.location_name):
+        if not self._is_source_enabled(source_key):
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return items
 
         try:
@@ -562,17 +752,35 @@ class MonitorEngine:
                     )
                 )
             logger.info("Found %d emergency-related results", len(items))
-        except Exception:
+        except Exception as exc:
             logger.exception("Failed to fetch emergency items")
+            self._record_source_fetch(
+                source_key,
+                success=False,
+                latency_ms=(perf_counter() - started) * 1000,
+                item_count=0,
+                error=str(exc),
+            )
+            return items
 
+        self._record_source_fetch(
+            source_key,
+            success=True,
+            latency_ms=(perf_counter() - started) * 1000,
+            item_count=len(items),
+        )
         return items
 
     async def fetch_google_cse_items(self) -> List[AlertItem]:
+        source_key = "google_cse"
+        started = perf_counter()
         items: List[AlertItem] = []
-        if not self.config.google_cse_api_key or not self.config.google_cse_cx:
+        if not self._is_source_enabled(source_key):
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return items
         query = self._limit_query(self._build_search_query())
         if not query:
+            self._record_source_fetch(source_key, success=True, latency_ms=(perf_counter() - started) * 1000, item_count=0)
             return items
         url = "https://www.googleapis.com/customsearch/v1"
         params = {
@@ -586,7 +794,14 @@ class MonitorEngine:
                 resp = await client.get(url, params=params)
                 resp.raise_for_status()
                 payload = resp.json()
-            except Exception:
+            except Exception as exc:
+                self._record_source_fetch(
+                    source_key,
+                    success=False,
+                    latency_ms=(perf_counter() - started) * 1000,
+                    item_count=0,
+                    error=str(exc),
+                )
                 return items
         for entry in payload.get("items", []) or []:
             link = entry.get("link")
@@ -602,6 +817,12 @@ class MonitorEngine:
                     source_kind="google_cse",
                 )
             )
+        self._record_source_fetch(
+            source_key,
+            success=True,
+            latency_ms=(perf_counter() - started) * 1000,
+            item_count=len(items),
+        )
         return items
 
     async def gather_items(self) -> List[AlertItem]:
