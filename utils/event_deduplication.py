@@ -146,6 +146,7 @@ class _AggregateEvent:
     url: str
     title: str
     snippet: str
+    primary_source: str
     source_kind: str
     timestamp: datetime | None
     title_tokens: set[str]
@@ -176,6 +177,7 @@ class _AggregateEvent:
             url=url,
             title=normalized_title,
             snippet=normalized_snippet,
+            primary_source=source or "Unknown",
             source_kind=source_kind or "unknown",
             timestamp=_to_utc_datetime(published_at),
             title_tokens=_tokenize(match_title),
@@ -198,14 +200,30 @@ class _AggregateEvent:
         if incoming.snippet and incoming.snippet not in self.merged_snippets:
             self.merged_snippets.append(incoming.snippet)
 
-        if incoming.timestamp and (self.timestamp is None or incoming.timestamp < self.timestamp):
+        incoming_is_earlier = bool(
+            incoming.timestamp and (self.timestamp is None or incoming.timestamp < self.timestamp)
+        )
+        if incoming_is_earlier:
             self.timestamp = incoming.timestamp
             self.url = incoming.url
 
         current_priority = SOURCE_KIND_PRIORITY.get(self.source_kind, 0)
         incoming_priority = SOURCE_KIND_PRIORITY.get(incoming.source_kind, 0)
+        promote_primary = False
         if incoming_priority > current_priority:
             self.source_kind = incoming.source_kind
+            promote_primary = True
+        elif incoming_priority == current_priority and incoming_is_earlier:
+            promote_primary = True
+        elif (
+            incoming_priority == current_priority
+            and incoming.primary_source
+            and self.primary_source
+            and incoming.primary_source < self.primary_source
+        ):
+            promote_primary = True
+        if promote_primary:
+            self.primary_source = incoming.primary_source
 
         if len(incoming.title_tokens) > len(self.title_tokens):
             self.title = incoming.title
@@ -218,7 +236,17 @@ class _AggregateEvent:
 
     def to_event(self) -> DeduplicatedEvent:
         published_at = self.timestamp.isoformat().replace("+00:00", "Z") if self.timestamp else None
-        merged_sources = tuple(sorted(self.merged_sources))
+        ordered_sources: list[str] = []
+        primary = (self.primary_source or "").strip()
+        if primary:
+            ordered_sources.append(primary)
+        for source in self.merged_sources:
+            value = (source or "").strip()
+            if value and value not in ordered_sources:
+                ordered_sources.append(value)
+        if not ordered_sources:
+            ordered_sources.append("Unknown")
+        merged_sources = tuple(ordered_sources)
         return DeduplicatedEvent(
             url=self.url,
             title=self.title,

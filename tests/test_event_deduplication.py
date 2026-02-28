@@ -34,6 +34,8 @@ class EventDeduplicationTests(unittest.TestCase):
         merged = events[0]
         self.assertEqual(merged.merged_count, 2)
         self.assertEqual(merged.source_kind, "emergency_search")
+        self.assertEqual(merged.merged_sources[0], "Emergency Search")
+        self.assertTrue(merged.source.startswith("Emergency Search"))
         self.assertIn("City News", merged.source)
         self.assertIn("Emergency Search", merged.source)
         self.assertIn("bridge fire", merged.title.lower())
