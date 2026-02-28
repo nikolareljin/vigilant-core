@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Sequence
 
@@ -242,8 +241,8 @@ def _insert_event_history(
         INSERT INTO event_history (
             alert_id, event_timestamp_utc, severity, confidence,
             impact_score, predictive_outcome, is_relevant,
-            normalized_payload_json, recorded_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            normalized_payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             alert_id,
@@ -254,7 +253,6 @@ def _insert_event_history(
             predictive_outcome,
             int(is_relevant),
             payload_json,
-            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         ),
     )
 
