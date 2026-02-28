@@ -15,6 +15,10 @@ All notable changes to VigilantCore will be documented in this file.
 - **Monitor persistence wiring**: Monitor processing now passes deduplicated source/URL metadata and normalized payloads into SQLite persistence.
 - **Alert schema**: Added `source_kind` persistence to the `alerts` table with backward-compatible migration behavior.
 
+### Fixed
+
+- **SQLite foreign key enforcement**: Enabled `PRAGMA foreign_keys = ON` for every database connection so `event_history`/`source_metadata` cascade with alert deletion as designed.
+
 ## [0.5.0] - 2026-02-27
 
 ### Added
