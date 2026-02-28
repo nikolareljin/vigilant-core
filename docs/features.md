@@ -102,6 +102,20 @@ The setup page includes a regional source preview panel that:
 
 You can also query the same data programmatically via `GET /api/source-preview`.
 
+### Source Health Indicators
+
+VigilantCore tracks source-health telemetry for each ingestion source (`RSS`, `NewsAPI`, `Google CSE`, `Bing Search`, `DuckDuckGo`, `Emergency Search`):
+
+- last successful fetch timestamp (`last_successful_fetch_utc`)
+- cumulative fetch error count (`error_count`)
+- latest fetch latency in milliseconds (`last_latency_ms`)
+
+The web dashboard includes a **Source Health Indicators** table, and the same data is available through:
+
+- `GET /api/source-health`
+
+This helps quickly diagnose degraded upstream sources (for example repeated API errors or increasing latency) without inspecting logs.
+
 This discovery happens automatically based on your ZIP code - the app maps your ZIP to the correct state and searches for relevant local sources.
 
 ### Local AI Processing

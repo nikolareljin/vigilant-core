@@ -52,6 +52,7 @@ cd vigilant-core
 - **International Regional Coverage**: Canada, Europe (priority), North Africa, China/Far East, Australia, South Africa, Central America, South America, plus broader Middle East/South Asia/Southeast Asia/Sub-Saharan Africa/global fallback
 - **Coordinate-First Source Discovery**: Latitude/longitude alone can infer region and automatically seed relevant regional source URLs and localized Google News feeds
 - **Source Preview UI/API**: Setup page preview and `/api/source-preview` endpoint show the inferred region and curated source URLs before saving
+- **Source Health Indicators**: Track per-source last successful fetch time, cumulative error count, and latest fetch latency in the dashboard and `/api/source-health`
 - **AI Suggested Actions Toggle**: Enable/disable actionable suggestions shown next to the AI insight result from settings
 - **Unified Event Normalization**: All alerts are normalized into a consistent schema with `severity`, `confidence`, UTC-normalized timestamps, and structured location fields
 - **Event Deduplication Engine**: Overlapping alerts from different feeds/search providers are merged into one canonical event with aggregated source attribution
@@ -362,6 +363,7 @@ Settings page prompts for:
 - **Radius (km)** - Search area
 - **AI Settings** - Model preferences, insight refresh rate
 - **Data Sources** - RSS feeds, API keys
+- **Source Health Indicators** - Per-source fetch health table (last success, errors, latency, and item counts)
 
 Additional data view: `http://127.0.0.1:8765/data`
 
