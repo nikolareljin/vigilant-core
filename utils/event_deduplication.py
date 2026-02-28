@@ -19,6 +19,13 @@ SOURCE_KIND_PRIORITY = {
     "unknown": 0,
 }
 
+_TITLE_PLACEHOLDERS = {
+    "(no title)",
+    "no title",
+    "untitled",
+    "(untitled)",
+}
+
 _WORD_RE = re.compile(r"[a-z0-9]+")
 _STOPWORDS = {
     "a",
@@ -90,6 +97,14 @@ def _title_fingerprint(title: str) -> str:
     return "|".join(tokens[:8])
 
 
+def _normalize_title_for_match(title: str) -> str:
+    raw = (title or "").strip()
+    lowered = raw.lower()
+    if lowered in _TITLE_PLACEHOLDERS:
+        return ""
+    return raw
+
+
 def _jaccard(left: set[str], right: set[str]) -> float:
     if not left and not right:
         return 1.0
@@ -153,18 +168,19 @@ class _AggregateEvent:
         published_at: str | None,
     ) -> "_AggregateEvent":
         raw_title = (title or "").strip()
+        match_title = _normalize_title_for_match(raw_title)
         normalized_title = raw_title or "(no title)"
         normalized_snippet = snippet or ""
-        body_text = f"{raw_title} {normalized_snippet}".strip()
+        body_text = f"{match_title} {normalized_snippet}".strip()
         return cls(
             url=url,
             title=normalized_title,
             snippet=normalized_snippet,
             source_kind=source_kind or "unknown",
             timestamp=_to_utc_datetime(published_at),
-            title_tokens=_tokenize(raw_title),
+            title_tokens=_tokenize(match_title),
             body_tokens=_tokenize(body_text),
-            title_fingerprint=_title_fingerprint(raw_title),
+            title_fingerprint=_title_fingerprint(match_title),
             merged_urls=[url],
             merged_sources=[source or "Unknown"],
             merged_snippets=[normalized_snippet] if normalized_snippet else [],
@@ -228,6 +244,13 @@ def deduplicate_events(
     fingerprint_index: dict[str, set[int]] = {}
     token_index: dict[str, set[int]] = {}
 
+    def _candidate_sort_key(entry: _AggregateEvent) -> tuple[int, datetime, int, str]:
+        # Stable merge target ordering avoids run-to-run drift from set iteration.
+        has_timestamp = 0 if entry.timestamp else 1
+        timestamp = entry.timestamp or datetime.max.replace(tzinfo=timezone.utc)
+        source_priority = SOURCE_KIND_PRIORITY.get(entry.source_kind, 0)
+        return (has_timestamp, timestamp, -source_priority, entry.url)
+
     def _index_aggregate(entry: _AggregateEvent) -> None:
         entry_id = id(entry)
         aggregate_by_id[entry_id] = entry
@@ -266,7 +289,7 @@ def deduplicate_events(
                 if aggregate is not None:
                     candidate_pool[aggregate_id] = aggregate
         merged = False
-        for current in candidate_pool.values():
+        for current in sorted(candidate_pool.values(), key=_candidate_sort_key):
             if _is_overlap(candidate, current, overlap_window_hours):
                 current.merge(candidate)
                 _index_aggregate(current)

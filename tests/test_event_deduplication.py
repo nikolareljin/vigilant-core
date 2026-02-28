@@ -114,6 +114,30 @@ class EventDeduplicationTests(unittest.TestCase):
         self.assertEqual(len(events), 2)
         self.assertTrue(all(event.merged_count == 1 for event in events))
 
+    def test_placeholder_titles_do_not_force_false_merge(self) -> None:
+        events = deduplicate_events(
+            [
+                {
+                    "url": "https://a.example.com/item/untitled-placeholder-1",
+                    "title": "(no title)",
+                    "snippet": "",
+                    "published_at": "2026-02-27T13:00:00Z",
+                    "source": "Feed A",
+                    "source_kind": "rss",
+                },
+                {
+                    "url": "https://b.example.com/item/untitled-placeholder-2",
+                    "title": "(no title)",
+                    "snippet": "",
+                    "published_at": "2026-02-27T13:05:00Z",
+                    "source": "Feed B",
+                    "source_kind": "rss",
+                },
+            ]
+        )
+        self.assertEqual(len(events), 2)
+        self.assertTrue(all(event.merged_count == 1 for event in events))
+
     def test_semantic_merge_requires_timestamps_for_window_check(self) -> None:
         events = deduplicate_events(
             [

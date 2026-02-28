@@ -15,7 +15,8 @@ VigilantCore now merges duplicate or overlapping alerts from multiple upstream s
 - Remaining candidates are semantically merged when they overlap by:
   - normalized title fingerprint match, or
   - high title/body token overlap within a time window (default 6 hours) when both items include timestamps.
-- Blank/missing titles do not produce active title fingerprints, preventing unrelated untitled events from auto-merging.
+- Blank/missing titles (after normalization) do not produce active title fingerprints, preventing unrelated untitled events from auto-merging.
+- Common placeholder titles such as `(no title)` / `untitled` are normalized as missing titles for fingerprint/token matching.
 - If either candidate is missing a timestamp, semantic time-window overlap checks are not applied (only direct fingerprint equivalence can merge).
 - Merged event output keeps:
   - canonical URL/title/snippet,
