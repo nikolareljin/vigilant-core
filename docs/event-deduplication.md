@@ -23,9 +23,8 @@ VigilantCore now merges duplicate or overlapping alerts from multiple upstream s
   - merged source list (joined with ` | `),
   - preferred source kind (highest-priority source type),
   - merged metadata (`merged_count`, `merged_urls`, `merged_sources`) for internal use.
-- Canonical URL selection is deterministic and DB-aware:
-  - prefers an already-stored URL from the merged URL set when available
-  - otherwise uses a stable lexical URL choice for consistent re-runs
+- Canonical URL selection is deterministic and avoids SQLite checks during gather/fetch:
+  - uses a stable lexical URL choice from the merged URL set for consistent re-runs
 - Before parsing/insertion, monitor processing checks all merged URLs against SQLite to avoid reinserting equivalent events when canonical URL choice differs between runs.
 
 ## Source Kind Priority

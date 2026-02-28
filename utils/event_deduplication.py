@@ -243,6 +243,7 @@ def deduplicate_events(
     aggregate_by_id: dict[int, _AggregateEvent] = {}
     fingerprint_index: dict[str, set[int]] = {}
     token_index: dict[str, set[int]] = {}
+    aggregate_index_state: dict[int, tuple[str, tuple[str, ...]]] = {}
 
     def _candidate_sort_key(entry: _AggregateEvent) -> tuple[int, datetime, int, str]:
         # Stable merge target ordering avoids run-to-run drift from set iteration.
@@ -254,6 +255,22 @@ def deduplicate_events(
     def _index_aggregate(entry: _AggregateEvent) -> None:
         entry_id = id(entry)
         aggregate_by_id[entry_id] = entry
+        prior_state = aggregate_index_state.get(entry_id)
+        if prior_state:
+            prior_fingerprint, prior_tokens = prior_state
+            if prior_fingerprint:
+                prior_bucket = fingerprint_index.get(prior_fingerprint)
+                if prior_bucket:
+                    prior_bucket.discard(entry_id)
+                    if not prior_bucket:
+                        fingerprint_index.pop(prior_fingerprint, None)
+            for token in prior_tokens:
+                token_bucket = token_index.get(token)
+                if token_bucket:
+                    token_bucket.discard(entry_id)
+                    if not token_bucket:
+                        token_index.pop(token, None)
+
         if entry.title_fingerprint:
             fingerprint_index.setdefault(entry.title_fingerprint, set()).add(entry_id)
         index_tokens = sorted(entry.title_tokens)[:8]
@@ -261,6 +278,7 @@ def deduplicate_events(
             index_tokens = sorted(entry.body_tokens)[:8]
         for token in index_tokens:
             token_index.setdefault(token, set()).add(entry_id)
+        aggregate_index_state[entry_id] = (entry.title_fingerprint, tuple(index_tokens))
 
     for item in items:
         url = str(item.get("url") or "").strip()

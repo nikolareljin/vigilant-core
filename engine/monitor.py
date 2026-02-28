@@ -72,6 +72,19 @@ class MonitorEngine:
         )
         self.model_name = self._parser.current_model()
 
+    @staticmethod
+    def _url_exists_cached(
+        url: str,
+        cache: Dict[str, bool],
+    ) -> bool:
+        if not url:
+            return False
+        exists = cache.get(url)
+        if exists is None:
+            exists = database.alert_exists(url)
+            cache[url] = exists
+        return exists
+
     def _location_context(self) -> str:
         if self.config.relax_location_filter:
             return "Global"
@@ -697,27 +710,11 @@ class MonitorEngine:
                 for item in filtered_items
             ]
         )
-        existing_url_cache: Dict[str, bool] = {}
-
-        def _url_exists_cached(url: str) -> bool:
-            if not url:
-                return False
-            exists = existing_url_cache.get(url)
-            if exists is None:
-                exists = database.alert_exists(url)
-                existing_url_cache[url] = exists
-            return exists
 
         unique_items: List[AlertItem] = []
         for event in merged_events:
             merged_urls = tuple(dict.fromkeys(event.merged_urls)) if event.merged_urls else (event.url,)
-            canonical_url = None
-            for candidate in sorted(merged_urls):
-                if _url_exists_cached(candidate):
-                    canonical_url = candidate
-                    break
-            if canonical_url is None:
-                canonical_url = min((url for url in merged_urls if url), default=event.url)
+            canonical_url = min((url for url in merged_urls if url), default=event.url)
             unique_items.append(
                 AlertItem(
                     url=canonical_url,
@@ -757,19 +754,10 @@ class MonitorEngine:
         total = 0
         existing_url_cache: Dict[str, bool] = {}
 
-        def _url_exists_cached(url: str) -> bool:
-            if not url:
-                return False
-            exists = existing_url_cache.get(url)
-            if exists is None:
-                exists = database.alert_exists(url)
-                existing_url_cache[url] = exists
-            return exists
-
         for item in items:
             total += 1
             dedup_urls = item.merged_urls or (item.url,)
-            if any(_url_exists_cached(candidate) for candidate in dedup_urls):
+            if any(self._url_exists_cached(candidate, existing_url_cache) for candidate in dedup_urls):
                 continue
             parsed = await self._parser.parse_async(item.title, item.snippet)
             normalized = normalize_event_payload(
