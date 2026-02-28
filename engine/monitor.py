@@ -10,7 +10,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 from math import asin, cos, radians, sin, sqrt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from time import perf_counter
 from typing import Callable, Dict, Iterable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -143,7 +143,7 @@ class MonitorEngine:
         item_count: int = 0,
         error: str | None = None,
     ) -> None:
-        now_iso = datetime.utcnow().isoformat() + "Z"
+        now_iso = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         with self._source_health_lock:
             entry = self._source_health.setdefault(
                 source_key,
@@ -608,7 +608,7 @@ class MonitorEngine:
                         source=article.get("source", {}).get("name", "News API"),
                         source_kind="news_api",
                     )
-                    )
+                )
             if items:
                 self._record_source_fetch(
                     source_key,
