@@ -780,6 +780,7 @@ class MonitorEngine:
                 snippet=item.snippet,
                 published_at=item.published_at,
                 source=item.source,
+                source_kind=item.source_kind,
                 severity=normalized["severity"],
                 confidence=normalized["confidence"],
                 event_timestamp_utc=normalized["timestamp_utc"],
@@ -791,6 +792,9 @@ class MonitorEngine:
                 location_zip_code=normalized_location.get("zip_code") or None,
                 location_latitude=normalized_location.get("latitude"),
                 location_longitude=normalized_location.get("longitude"),
+                merged_urls=dedup_urls,
+                merged_sources=tuple(part.strip() for part in item.source.split("|") if part.strip()),
+                normalized_payload=normalized,
             )
             if inserted:
                 new_count += 1

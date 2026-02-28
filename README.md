@@ -55,6 +55,7 @@ cd vigilant-core
 - **AI Suggested Actions Toggle**: Enable/disable actionable suggestions shown next to the AI insight result from settings
 - **Unified Event Normalization**: All alerts are normalized into a consistent schema with `severity`, `confidence`, UTC-normalized timestamps, and structured location fields
 - **Event Deduplication Engine**: Overlapping alerts from different feeds/search providers are merged into one canonical event with aggregated source attribution
+- **SQLite Local Cache**: Stores normalized alerts plus `event_history` and `source_metadata` records for traceable local event persistence
 - **Multiple Data Sources**: NewsAPI, DuckDuckGo, Google CSE, RSS feeds, local discovery, and curated global sources (including disaster/crisis signal sources)
 - **Cross-Platform**: Web dashboard and Qt desktop app
 - **Privacy-First**: All processing done locally via Ollama
