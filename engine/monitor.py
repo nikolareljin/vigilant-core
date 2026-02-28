@@ -43,6 +43,7 @@ class AlertItem:
     source: str
     source_kind: str = "unknown"
     merged_urls: tuple[str, ...] = ()
+    merged_sources: tuple[str, ...] = ()
 
 
 class MonitorEngine:
@@ -724,6 +725,7 @@ class MonitorEngine:
                     source=event.source,
                     source_kind=event.source_kind,
                     merged_urls=merged_urls,
+                    merged_sources=event.merged_sources,
                 )
             )
         logger.info(
@@ -780,6 +782,7 @@ class MonitorEngine:
                 snippet=item.snippet,
                 published_at=item.published_at,
                 source=item.source,
+                source_kind=item.source_kind,
                 severity=normalized["severity"],
                 confidence=normalized["confidence"],
                 event_timestamp_utc=normalized["timestamp_utc"],
@@ -791,6 +794,9 @@ class MonitorEngine:
                 location_zip_code=normalized_location.get("zip_code") or None,
                 location_latitude=normalized_location.get("latitude"),
                 location_longitude=normalized_location.get("longitude"),
+                merged_urls=dedup_urls,
+                merged_sources=item.merged_sources,
+                normalized_payload=normalized,
             )
             if inserted:
                 new_count += 1

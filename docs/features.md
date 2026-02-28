@@ -234,3 +234,10 @@ Each alert contains:
 - Impact score (1-10)
 - AI-generated analysis
 - Location relevance
+
+### Local Cache Tables
+
+VigilantCore maintains local SQLite cache tables for:
+- `alerts`: canonical normalized alert records used by UI/API views
+- `event_history`: point-in-time normalized event snapshots and scoring metadata per inserted alert
+- `source_metadata`: source attribution rows (primary/secondary source names, source kind, merged URL set)

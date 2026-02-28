@@ -2,6 +2,23 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.7.0] - 2026-02-28
+
+### Added
+
+- **SQLite local cache tables**: Added dedicated `event_history` and `source_metadata` tables to persist normalized event snapshots and source attribution metadata per alert.
+- **Cache persistence test coverage**: Added `tests/test_sqlite_local_cache.py` to validate insertion of normalized event history and source metadata records.
+
+### Changed
+
+- **Alert insert pipeline**: `database.insert_alert(...)` now records canonical alert data and inserts companion history/source metadata rows in one SQLite transaction.
+- **Monitor persistence wiring**: Monitor processing now passes deduplicated source/URL metadata and normalized payloads into SQLite persistence.
+- **Alert schema**: Added `source_kind` persistence to the `alerts` table with backward-compatible migration behavior.
+
+### Fixed
+
+- **SQLite foreign key enforcement**: Enabled `PRAGMA foreign_keys = ON` for every database connection so `event_history`/`source_metadata` cascade with alert deletion as designed.
+
 ## [0.5.0] - 2026-02-27
 
 ### Added
