@@ -21,7 +21,7 @@ All notable changes to VigilantCore will be documented in this file.
 - **Dedup performance scaling**: Semantic dedup now uses lightweight fingerprint/token indexing to reduce full list scans on larger fetch batches.
 - **Merged URL persistence safety**: Ingestion now carries merged URL metadata through processing and checks all merged URLs against SQLite before insert, preventing reinsertions when canonical URL selection differs across runs.
 - **Timestamp-window semantics**: Semantic token-overlap merging now requires both events to have timestamps for the overlap window check.
-- **Monitor DB lookup efficiency**: URL existence checks in gather/process now use per-cycle caches to avoid repeated SQLite connection churn for the same URLs.
+- **Monitor DB lookup efficiency**: URL existence checks in `process_items()` now use per-cycle caches to avoid repeated SQLite connection churn for the same URLs.
 
 ## [0.4.0] - 2026-02-27
 
