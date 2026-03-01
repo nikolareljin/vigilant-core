@@ -400,6 +400,14 @@ function formatHealthTimestamp(value) {
 async function loadSourceHealth() {
   const tbody = document.getElementById('sourceHealthBody');
   const updated = document.getElementById('sourceHealthUpdated');
+  const appendCell = (row, value, className = '') => {
+    const cell = document.createElement('td');
+    if (className) {
+      cell.className = className;
+    }
+    cell.textContent = value;
+    row.appendChild(cell);
+  };
   try {
     const res = await fetch('/api/source-health');
     const data = await res.json();
@@ -413,14 +421,12 @@ async function loadSourceHealth() {
     for (const source of rows) {
       const tr = document.createElement('tr');
       const enabled = source.enabled ? 'Yes' : 'No';
-      tr.innerHTML = `
-        <td>${source.source_name || source.source_key || ''}</td>
-        <td class="${source.enabled ? '' : 'health-disabled'}">${enabled}</td>
-        <td>${formatHealthTimestamp(source.last_successful_fetch_utc)}</td>
-        <td>${source.error_count ?? 0}</td>
-        <td>${source.last_latency_ms ?? '--'}</td>
-        <td>${source.last_item_count ?? 0}</td>
-      `;
+      appendCell(tr, source.source_name || source.source_key || '');
+      appendCell(tr, enabled, source.enabled ? '' : 'health-disabled');
+      appendCell(tr, formatHealthTimestamp(source.last_successful_fetch_utc));
+      appendCell(tr, String(source.error_count ?? 0));
+      appendCell(tr, String(source.last_latency_ms ?? '--'));
+      appendCell(tr, String(source.last_item_count ?? 0));
       tbody.appendChild(tr);
     }
     updated.textContent = 'Updated: ' + new Date().toLocaleTimeString();
