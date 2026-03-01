@@ -2,6 +2,22 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.8.0] - 2026-02-28
+
+### Added
+
+- **Source health telemetry tracking**: Added per-source health indicators for RSS, NewsAPI, Google CSE, Bing Search, DuckDuckGo, and Emergency Search with:
+  - last successful fetch timestamp
+  - cumulative fetch error count
+  - latest fetch latency (milliseconds)
+- **Source health API endpoint**: Added `GET /api/source-health` to expose current source-health indicators as JSON.
+- **Dashboard source health panel**: Added a live source-health table to the web dashboard for quick operational visibility into source fetch quality.
+- **Source health tests**: Added `tests/test_source_health.py` to validate source-health initialization and success/failure metric updates.
+
+### Changed
+
+- **Fetch pipeline instrumentation**: Wrapped all monitor source fetch methods with source-health recording logic for attempts, successes, failures, item counts, and latencies.
+
 ## [0.7.0] - 2026-02-28
 
 ### Added
