@@ -119,20 +119,23 @@ class MonitorEngine:
     def _initialize_source_health(self) -> None:
         with self._source_health_lock:
             for source_key, display_name in SOURCE_HEALTH_CATALOG.items():
-                self._source_health[source_key] = {
-                    "source_key": source_key,
-                    "source_name": display_name,
-                    "enabled": self._is_source_enabled(source_key),
-                    "last_attempt_utc": None,
-                    "last_successful_fetch_utc": None,
-                    "last_error_utc": None,
-                    "last_error": None,
-                    "error_count": 0,
-                    "attempt_count": 0,
-                    "success_count": 0,
-                    "last_latency_ms": None,
-                    "last_item_count": 0,
-                }
+                self._source_health[source_key] = self._default_source_health_entry(source_key, display_name)
+
+    def _default_source_health_entry(self, source_key: str, source_name: str | None = None) -> Dict[str, object]:
+        return {
+            "source_key": source_key,
+            "source_name": source_name or SOURCE_HEALTH_CATALOG.get(source_key, source_key),
+            "enabled": self._is_source_enabled(source_key),
+            "last_attempt_utc": None,
+            "last_successful_fetch_utc": None,
+            "last_error_utc": None,
+            "last_error": None,
+            "error_count": 0,
+            "attempt_count": 0,
+            "success_count": 0,
+            "last_latency_ms": None,
+            "last_item_count": 0,
+        }
 
     def _record_source_fetch(
         self,
@@ -147,20 +150,7 @@ class MonitorEngine:
         with self._source_health_lock:
             entry = self._source_health.setdefault(
                 source_key,
-                {
-                    "source_key": source_key,
-                    "source_name": SOURCE_HEALTH_CATALOG.get(source_key, source_key),
-                    "enabled": self._is_source_enabled(source_key),
-                    "last_attempt_utc": None,
-                    "last_successful_fetch_utc": None,
-                    "last_error_utc": None,
-                    "last_error": None,
-                    "error_count": 0,
-                    "attempt_count": 0,
-                    "success_count": 0,
-                    "last_latency_ms": None,
-                    "last_item_count": 0,
-                },
+                self._default_source_health_entry(source_key),
             )
             entry["enabled"] = self._is_source_enabled(source_key)
             entry["last_attempt_utc"] = now_iso
@@ -182,20 +172,7 @@ class MonitorEngine:
         with self._source_health_lock:
             entry = self._source_health.setdefault(
                 source_key,
-                {
-                    "source_key": source_key,
-                    "source_name": SOURCE_HEALTH_CATALOG.get(source_key, source_key),
-                    "enabled": self._is_source_enabled(source_key),
-                    "last_attempt_utc": None,
-                    "last_successful_fetch_utc": None,
-                    "last_error_utc": None,
-                    "last_error": None,
-                    "error_count": 0,
-                    "attempt_count": 0,
-                    "success_count": 0,
-                    "last_latency_ms": None,
-                    "last_item_count": 0,
-                },
+                self._default_source_health_entry(source_key),
             )
             entry["enabled"] = self._is_source_enabled(source_key)
 
