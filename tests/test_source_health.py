@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from unittest.mock import patch
 
@@ -84,6 +85,38 @@ class SourceHealthTests(unittest.TestCase):
         self.assertNotIn("def456", safe)
         self.assertIn("key=%5BREDACTED%5D", safe)
         self.assertIn("cx=%5BREDACTED%5D", safe)
+
+    def test_rss_404_feeds_count_as_failure_when_no_items(self) -> None:
+        engine = self._build_engine(disable_rss_fetch=False)
+
+        class _Resp:
+            status_code = 404
+            text = ""
+
+            def raise_for_status(self) -> None:
+                return None
+
+        class _Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def get(self, _url):
+                return _Resp()
+
+        with patch("engine.monitor.httpx.AsyncClient", return_value=_Client()):
+            with patch.object(engine, "_load_feed_cache", return_value={}):
+                with patch.object(engine, "_save_feed_cache"):
+                    items = asyncio.run(engine.fetch_rss_items(["https://example.com/feed.xml"]))
+
+        self.assertEqual(items, [])
+        rss = {entry["source_key"]: entry for entry in engine.get_source_health_snapshot()}["rss"]
+        self.assertEqual(rss["success_count"], 0)
+        self.assertEqual(rss["error_count"], 1)
+        self.assertIsNone(rss["last_successful_fetch_utc"])
+        self.assertIsNotNone(rss["last_error_utc"])
 
 
 if __name__ == "__main__":

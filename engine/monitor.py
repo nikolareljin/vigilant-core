@@ -148,10 +148,10 @@ class MonitorEngine:
     ) -> None:
         now_iso = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         with self._source_health_lock:
-            entry = self._source_health.setdefault(
-                source_key,
-                self._default_source_health_entry(source_key),
-            )
+            entry = self._source_health.get(source_key)
+            if entry is None:
+                entry = self._default_source_health_entry(source_key)
+                self._source_health[source_key] = entry
             entry["enabled"] = self._is_source_enabled(source_key)
             entry["last_attempt_utc"] = now_iso
             entry["last_latency_ms"] = round(max(0.0, float(latency_ms)), 2)
@@ -170,10 +170,10 @@ class MonitorEngine:
 
     def _mark_source_skipped(self, source_key: str) -> None:
         with self._source_health_lock:
-            entry = self._source_health.setdefault(
-                source_key,
-                self._default_source_health_entry(source_key),
-            )
+            entry = self._source_health.get(source_key)
+            if entry is None:
+                entry = self._default_source_health_entry(source_key)
+                self._source_health[source_key] = entry
             entry["enabled"] = self._is_source_enabled(source_key)
 
     def _sanitize_error_message(self, error: object) -> str:
@@ -481,13 +481,19 @@ class MonitorEngine:
             cache["invalid_feeds"] = invalid_cached
             self._save_feed_cache(cache)
         latency_ms = (perf_counter() - started) * 1000
-        if fetch_errors > 0 and len(items) == 0 and len(feed_urls) > 0:
+        failed_feeds = fetch_errors + len(bad_feeds)
+        if failed_feeds > 0 and len(items) == 0 and len(feed_urls) > 0:
+            error_parts = []
+            if fetch_errors > 0:
+                error_parts.append(f"{fetch_errors} feed(s) had fetch errors")
+            if bad_feeds:
+                error_parts.append(f"{len(bad_feeds)} feed(s) returned 404/410")
             self._record_source_fetch(
                 source_key,
                 success=False,
                 latency_ms=latency_ms,
                 item_count=0,
-                error=f"RSS fetch failed for {fetch_errors} feed(s)",
+                error="; ".join(error_parts) if error_parts else "RSS fetch failed",
             )
         else:
             self._record_source_fetch(source_key, success=True, latency_ms=latency_ms, item_count=len(items))
