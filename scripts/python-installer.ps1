@@ -43,7 +43,9 @@ switch -Regex ($effectiveArch) {
 }
 
 $installerUrl = "$baseUrl/$installerFile"
-$installerPath = Join-Path $env:TEMP $installerFile
+$installerBasename = [System.IO.Path]::GetFileNameWithoutExtension($installerFile)
+$installerExt = [System.IO.Path]::GetExtension($installerFile)
+$installerPath = Join-Path $env:TEMP ("{0}-{1}{2}" -f $installerBasename, [System.Guid]::NewGuid().ToString("N"), $installerExt)
 
 Write-Host "Downloading installer from $installerUrl" -ForegroundColor Cyan
 try {

@@ -95,19 +95,19 @@ function Install-Python312 {
         Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
         return $false
     }
-    # Refresh PATH from machine/user while preserving process-level PATH entries.
+    # Refresh PATH with machine/user precedence, then append process-only entries.
     $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
     $currentEntries = ($env:Path -split ';') | Where-Object { $_ -and $_.Trim() -ne '' }
     $newEntries = (@($machinePath, $userPath) -join ';' -split ';') | Where-Object { $_ -and $_.Trim() -ne '' }
     $allEntries = New-Object System.Collections.Generic.List[string]
     $seen = New-Object 'System.Collections.Generic.HashSet[string]'([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($entry in $currentEntries) {
+    foreach ($entry in $newEntries) {
         if ($seen.Add($entry)) {
             [void]$allEntries.Add($entry)
         }
     }
-    foreach ($entry in $newEntries) {
+    foreach ($entry in $currentEntries) {
         if ($seen.Add($entry)) {
             [void]$allEntries.Add($entry)
         }
