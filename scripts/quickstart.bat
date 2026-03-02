@@ -20,6 +20,13 @@ if not defined PYTHON_VERSION (
     echo ERROR: Python version file is empty: %PYTHON_VERSION_FILE%
     exit /b 1
 )
+echo(%PYTHON_VERSION%| findstr /R "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
+if errorlevel 1 (
+    echo ERROR: Invalid Python version value "%PYTHON_VERSION%" in %PYTHON_VERSION_FILE%.
+    echo Expected version format X.Y.Z containing digits and dots only.
+    exit /b 1
+)
+set "PYTHON_RELEASE_TAG=%PYTHON_VERSION:.=%"
 
 if not defined REPO_URL set "REPO_URL=%REPO_URL_DEFAULT%"
 if not defined TARGET_DIR set "TARGET_DIR=%TARGET_DIR_DEFAULT%"
@@ -173,7 +180,7 @@ echo Python 3.12 is required. Attempting to install Python %PYTHON_VERSION%...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$version = '%PYTHON_VERSION%'; $arch = $env:PROCESSOR_ARCHITECTURE; if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }; $fileName = switch -Regex ($arch) { 'ARM64' { 'python-' + $version + '-arm64.exe'; break } '^(x86|X86)$' { 'python-' + $version + '.exe'; break } default { 'python-' + $version + '-amd64.exe' } }; $installer = Join-Path $env:TEMP $fileName; try { $url = 'https://www.python.org/ftp/python/' + $version + '/' + $fileName; Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing; $sig = Get-AuthenticodeSignature -FilePath $installer; if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject.IndexOf('Python Software Foundation', [System.StringComparison]::OrdinalIgnoreCase) -lt 0) { throw 'Python installer signature validation failed.' }; $process = Start-Process -FilePath $installer -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1' -Wait -PassThru; if ($process.ExitCode -ne 0) { throw ('Python installer failed with exit code ' + $process.ExitCode) } } finally { if (Test-Path $installer) { Remove-Item $installer -Force -ErrorAction SilentlyContinue } }"
 if errorlevel 1 (
     echo ERROR: Python installer failed.
-    echo Install Python 3.12 manually from https://www.python.org/downloads/release/python-3122/
+    echo Install Python 3.12 manually from https://www.python.org/downloads/release/python-%PYTHON_RELEASE_TAG%/
     exit /b 1
 )
 
@@ -181,7 +188,7 @@ echo.
 echo Python %PYTHON_VERSION% installer has completed.
 echo Your current CMD session may not see the updated PATH yet.
 echo Please close this window, open a new terminal, and run this script again.
-echo If needed, install manually from https://www.python.org/downloads/release/python-3122/
+echo If needed, install manually from https://www.python.org/downloads/release/python-%PYTHON_RELEASE_TAG%/
 exit /b 2
 
 :python_ready

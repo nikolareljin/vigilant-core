@@ -33,6 +33,10 @@ if (-not $PythonVersion) {
     Write-Host "ERROR: Python version file is empty: $PythonVersionFile" -ForegroundColor Red
     exit 1
 }
+if ($PythonVersion -notmatch '^\d+\.\d+\.\d+$' -or $PythonVersion.Contains('/') -or $PythonVersion.Contains('\')) {
+    Write-Host "ERROR: Invalid Python version format in $PythonVersionFile. Expected X.Y.Z without path separators." -ForegroundColor Red
+    exit 1
+}
 $PythonBaseUrl = "https://www.python.org/ftp/python/$PythonVersion"
 $PythonExpectedPublisher = "Python Software Foundation"
 $PythonExe = $null
@@ -105,7 +109,7 @@ function Install-Python312 {
     $installer = Get-PythonInstallerInfo
     $pythonInstallerUrl = $installer.Url
     $pythonInstallerPath = $installer.Path
-    Write-Host "Python 3.12 not found. Installing Python 3.12.2..." -ForegroundColor Yellow
+    Write-Host "Python 3.12 not found. Installing Python $PythonVersion..." -ForegroundColor Yellow
     Write-Host "Downloading installer from $pythonInstallerUrl" -ForegroundColor Cyan
     try {
         if ($PSVersionTable.PSVersion.Major -ge 6) {
