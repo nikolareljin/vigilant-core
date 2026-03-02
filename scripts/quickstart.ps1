@@ -101,19 +101,19 @@ function Install-Python312 {
 }
 
 function Refresh-PathPreservingCurrent {
-    # Keep active process PATH entries (including venv) while prepending machine/user PATH.
+    # Keep active process PATH entries (including venv) first, then append missing machine/user entries.
     $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
     $currentEntries = ($env:Path -split ';') | Where-Object { $_ -and $_.Trim() -ne '' }
     $newEntries = (@($machinePath, $userPath) -join ';' -split ';') | Where-Object { $_ -and $_.Trim() -ne '' }
     $allEntries = New-Object System.Collections.Generic.List[string]
     $seen = New-Object 'System.Collections.Generic.HashSet[string]'([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($entry in $newEntries) {
+    foreach ($entry in $currentEntries) {
         if ($seen.Add($entry)) {
             [void]$allEntries.Add($entry)
         }
     }
-    foreach ($entry in $currentEntries) {
+    foreach ($entry in $newEntries) {
         if ($seen.Add($entry)) {
             [void]$allEntries.Add($entry)
         }
