@@ -11,6 +11,7 @@ if not defined REPO_URL set "REPO_URL=%REPO_URL_DEFAULT%"
 if not defined TARGET_DIR set "TARGET_DIR=%TARGET_DIR_DEFAULT%"
 
 call :resolve_python_312
+if errorlevel 2 exit /b 0
 if errorlevel 1 exit /b 1
 
 REM Check for Git
@@ -152,7 +153,7 @@ echo Python 3.12.2 installer has completed.
 echo Your current CMD session may not see the updated PATH yet.
 echo Please close this window, open a new terminal, and run this script again.
 echo If needed, install manually from https://www.python.org/downloads/release/python-3122/
-exit /b 0
+exit /b 2
 
 :python_ready
 set "PYTHON_LAUNCH=%PYTHON_CMD% %PYTHON_ARGS%"

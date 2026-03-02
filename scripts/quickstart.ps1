@@ -153,7 +153,7 @@ if (Test-Path "update") {
 # Create virtual environment
 if (-not (Test-Path "venv")) {
     Write-Host "Creating virtual environment..." -ForegroundColor Cyan
-    Invoke-Python -m venv venv
+    Invoke-Python -Arguments @("-m", "venv", "venv")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Failed to create virtual environment" -ForegroundColor Red
         exit 1
