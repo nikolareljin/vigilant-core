@@ -23,6 +23,32 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$PythonVersionFile = Join-Path $PSScriptRoot "python-version.txt"
+if (-not (Test-Path $PythonVersionFile)) {
+    Write-Host "ERROR: Missing Python version file: $PythonVersionFile" -ForegroundColor Red
+    exit 1
+}
+$pythonVersionRaw = Get-Content -Path $PythonVersionFile -ErrorAction Stop | Select-Object -First 1
+$PythonVersion = if ($null -eq $pythonVersionRaw) { "" } else { $pythonVersionRaw.Trim() }
+if (-not $PythonVersion) {
+    Write-Host "ERROR: Python version file is empty: $PythonVersionFile" -ForegroundColor Red
+    exit 1
+}
+if ($PythonVersion -notmatch '^\d+\.\d+\.\d+$' -or $PythonVersion.Contains('/') -or $PythonVersion.Contains('\')) {
+    Write-Host "ERROR: Invalid Python version format in $PythonVersionFile. Expected X.Y.Z without path separators." -ForegroundColor Red
+    exit 1
+}
+if ($PythonVersion -notmatch '^3\.12\.') {
+    Write-Host "ERROR: Unsupported Python version '$PythonVersion' in $PythonVersionFile. This script currently requires Python 3.12.x." -ForegroundColor Red
+    exit 1
+}
+$PythonInstallerHelper = Join-Path $PSScriptRoot "python-installer.ps1"
+if (-not (Test-Path $PythonInstallerHelper)) {
+    Write-Host "ERROR: Missing Python installer helper: $PythonInstallerHelper" -ForegroundColor Red
+    exit 1
+}
+$PythonExe = $null
+$PythonExeArgs = @()
 
 # Function to check if command exists
 function Test-Command {
@@ -30,25 +56,115 @@ function Test-Command {
     $null -ne (Get-Command $CommandName -ErrorAction SilentlyContinue)
 }
 
-# Check for Python
-if (-not (Test-Command python)) {
-    Write-Host "ERROR: Python is required but not found in PATH." -ForegroundColor Red
-    Write-Host "Please install Python 3.12 from https://www.python.org/downloads/" -ForegroundColor Yellow
-    exit 1
-}
+function Test-Python312 {
+    param(
+        [string]$CommandName,
+        [string[]]$CommandArgs = @()
+    )
+    if (-not (Test-Command $CommandName)) {
+        return $false
+    }
 
-# Check Python version
-$pythonVersion = python --version 2>&1 | Out-String
-if ($pythonVersion -match "Python (\d+)\.(\d+)") {
-    $major = [int]$Matches[1]
-    $minor = [int]$Matches[2]
-    if ($major -ne 3 -or $minor -lt 10 -or $minor -gt 12) {
-        Write-Host "ERROR: Python 3.10-3.12 is required for Windows. Found: $pythonVersion" -ForegroundColor Red
-        Write-Host "Download Python 3.12 from https://www.python.org/downloads/" -ForegroundColor Yellow
-        Write-Host "Note: Python 3.13+ is not supported on Windows." -ForegroundColor Yellow
-        exit 1
+    try {
+        & $CommandName @CommandArgs -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
     }
 }
+
+function Resolve-Python312 {
+    if (Test-Python312 -CommandName "py" -CommandArgs @("-3.12")) {
+        return @{
+            Exe = "py"
+            Args = @("-3.12")
+        }
+    }
+    if (Test-Python312 -CommandName "python") {
+        return @{
+            Exe = "python"
+            Args = @()
+        }
+    }
+    return $null
+}
+
+function Install-Python312 {
+    Write-Host "Python 3.12 not found. Installing Python $PythonVersion..." -ForegroundColor Yellow
+    $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File $PythonInstallerHelper -Version $PythonVersion
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
+        return $false
+    }
+    Refresh-PathPreservingCurrent
+    return $true
+}
+
+function Refresh-PathPreservingCurrent {
+    # Keep active process PATH entries (including venv) first, then append missing machine/user entries.
+    $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $currentEntries = ($env:Path -split ';') | Where-Object { $_ -and $_.Trim() -ne '' }
+    $newEntries = (@($machinePath, $userPath) -join ';' -split ';') | Where-Object { $_ -and $_.Trim() -ne '' }
+    $allEntries = New-Object System.Collections.Generic.List[string]
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $currentEntries) {
+        if ($seen.Add($entry)) {
+            [void]$allEntries.Add($entry)
+        }
+    }
+    foreach ($entry in $newEntries) {
+        if ($seen.Add($entry)) {
+            [void]$allEntries.Add($entry)
+        }
+    }
+    $env:Path = ($allEntries -join ';')
+}
+
+function Remove-VenvDirectorySafely {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        Write-Host "ERROR: Refusing to delete '$Path' because it is a symlink/junction (reparse point)." -ForegroundColor Red
+        Write-Host "Please remove or fix this path manually, then re-run quickstart." -ForegroundColor Yellow
+        exit 1
+    }
+
+    Remove-Item -LiteralPath $Path -Recurse -Force
+}
+
+function Invoke-Python {
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Arguments
+    )
+    & $script:PythonExe @($script:PythonExeArgs) @Arguments
+}
+
+$pythonCmd = Resolve-Python312
+if (-not $pythonCmd) {
+    if (-not (Install-Python312)) {
+        exit 1
+    }
+    $pythonCmd = Resolve-Python312
+    if (-not $pythonCmd) {
+        Write-Host "Python 3.12 installation completed, but this terminal cannot see the updated PATH yet." -ForegroundColor Yellow
+        Write-Host "Close this PowerShell window, open a new one, and run this script again." -ForegroundColor Yellow
+        exit 2
+    }
+}
+$PythonExe = $pythonCmd.Exe
+$PythonExeArgs = $pythonCmd.Args
+Write-Host "Using Python launcher: $PythonExe $($PythonExeArgs -join ' ')" -ForegroundColor Green
 
 # Check for Git
 if (-not (Test-Command git)) {
@@ -82,9 +198,21 @@ if (Test-Path "update") {
 }
 
 # Create virtual environment
+# Ensure existing venv uses Python 3.12; recreate if stale or invalid.
+if (Test-Path ".\venv\Scripts\python.exe") {
+    $venvVersion = (& .\venv\Scripts\python.exe -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>$null | Out-String).Trim()
+    if ($venvVersion -ne "3.12") {
+        Write-Host "Existing virtual environment uses Python $venvVersion, but 3.12 is required. Recreating virtual environment..." -ForegroundColor Yellow
+        Remove-VenvDirectorySafely -Path ".\venv"
+    }
+} elseif (Test-Path "venv") {
+    Write-Host "Existing virtual environment is invalid or missing python.exe. Recreating virtual environment..." -ForegroundColor Yellow
+    Remove-VenvDirectorySafely -Path ".\venv"
+}
+
 if (-not (Test-Path "venv")) {
     Write-Host "Creating virtual environment..." -ForegroundColor Cyan
-    python -m venv venv
+    Invoke-Python -Arguments @("-m", "venv", "venv")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Failed to create virtual environment" -ForegroundColor Red
         exit 1
@@ -108,8 +236,8 @@ if (-not (Test-Command ollama)) {
         Write-Host "Installing Ollama via winget..." -ForegroundColor Cyan
         winget install -e --id Ollama.Ollama --silent
         
-        # Refresh environment variables
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        # Refresh PATH while preserving venv/session entries.
+        Refresh-PathPreservingCurrent
         
         # Check if ollama is now available
         if (-not (Test-Command ollama)) {

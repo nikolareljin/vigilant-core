@@ -181,7 +181,7 @@ For example, ZIP code `08544` (Princeton, NJ) automatically adds NWS New Jersey 
 
 ## Requirements
 - **Python 3.10+** (Linux/macOS)
-- **Python 3.10-3.12** (Windows - cannot exceed 3.12)
+- **Python 3.12** (Windows)
 - Git (for cloning/updating)
 - Ollama (automatically installed by quickstart scripts)
 
@@ -193,8 +193,8 @@ Choose the command for your operating system:
 |----------|---------|
 | **Linux** | `curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh \| bash` |
 | **macOS** | `curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh \| bash` |
-| **Windows (PowerShell)** | `.\scripts\quickstart.ps1` (after cloning repo) |
-| **Windows (CMD)** | `.\scripts\quickstart.bat` (after cloning repo) |
+| **Windows (PowerShell)** | `.\scripts\quickstart.ps1 -TargetDir "."` (after cloning repo) |
+| **Windows (CMD)** | `set TARGET_DIR=.` then `.\scripts\quickstart.bat` (after cloning repo) |
 
 ### Linux/macOS
 
@@ -225,18 +225,20 @@ cd vigilant-core
 
 **PowerShell (Recommended):**
 ```powershell
-.\scripts\quickstart.ps1
+.\scripts\quickstart.ps1 -TargetDir "."
 ```
 
 **Command Prompt:**
 ```cmd
+set TARGET_DIR=.
 .\scripts\quickstart.bat
 ```
 
 > **Note:** Unlike Linux/macOS, Windows users need to clone the repository first. The remote curl/wget approach doesn't work well on Windows due to PowerShell execution policies.
 
 **What the quickstart scripts do:**
-- ✅ Install/check Python and Git
+- ✅ Ensure Python 3.12 is available on Windows (auto-installs if missing)
+- ✅ Install/check Git
 - ✅ Clone or update the repository
 - ✅ Create and activate virtual environment
 - ✅ Install all Python dependencies
@@ -260,7 +262,7 @@ cd vigilant-core
 - All installations work without sudo
 
 **Windows:**
-- **Python 3.10-3.12 required** - Versions 3.13+ are not supported
+- **Python 3.12 required** for consistent Windows dependency support
 - Requires [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) for automatic Ollama installation
 - winget included with Windows 11 and Windows 10 (recent versions)
 - Alternative: Manual Ollama download from [ollama.com/download](https://ollama.com/download)
@@ -279,7 +281,8 @@ cd vigilant-core
 - You can cancel (Ctrl+C) and continue later with: `ollama pull llama3.2:1b`
 
 **"Python not found" or "Git not found"**
-- **Windows:** Install Python 3.10-3.12 (not 3.13+) from [python.org](https://www.python.org/downloads/)
+- **Windows:** Install Python 3.12.x from [python.org](https://www.python.org/downloads/windows/)
+- If quickstart auto-installs Python, close the current terminal and run quickstart again so PATH changes are picked up
 - **Linux/macOS:** Install Python 3.10+ from your package manager or [python.org](https://www.python.org/downloads/)
 - Install Git from [git-scm.com](https://git-scm.com/downloads)
 - Ensure both are added to your system PATH
@@ -452,12 +455,12 @@ python3 -m venv venv && source venv/bin/activate && pip install -r requirements.
 
 ### Windows (PowerShell)
 ```powershell
-py -m venv venv; .\\venv\\Scripts\\Activate.ps1; pip install -r requirements.txt; python src\\main.py
+py -3.12 -m venv venv; .\\venv\\Scripts\\Activate.ps1; pip install -r requirements.txt; python src\\main.py
 ```
 
 ### Windows (CMD)
 ```bat
-py -m venv venv && call venv\\Scripts\\activate && pip install -r requirements.txt && python src\\main.py
+py -3.12 -m venv venv && call venv\\Scripts\\activate && pip install -r requirements.txt && python src\\main.py
 ```
 
 ## One-Command Install Scripts
