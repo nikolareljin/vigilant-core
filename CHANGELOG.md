@@ -2,6 +2,14 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.8.1] - 2026-03-02
+
+### Fixed
+
+- **Windows quickstart Python compatibility**: `scripts/quickstart.ps1` and `scripts/quickstart.bat` now explicitly target Python 3.12 for virtual environment creation to avoid unsupported interpreter selection on Windows.
+- **PowerShell Python bootstrap**: `scripts/quickstart.ps1` now auto-installs Python 3.12.2 when missing using the official installer in silent mode, then retries setup.
+- **Windows documentation clarity**: Updated README requirements and troubleshooting guidance to document Python 3.12 as the required Windows version.
+
 ## [0.8.0] - 2026-02-28
 
 ### Added

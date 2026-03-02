@@ -23,6 +23,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$PythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
+$PythonInstallerPath = Join-Path $env:TEMP "python-3.12.2-amd64.exe"
+$PythonExe = $null
+$PythonExeArgs = @()
 
 # Function to check if command exists
 function Test-Command {
@@ -30,25 +34,69 @@ function Test-Command {
     $null -ne (Get-Command $CommandName -ErrorAction SilentlyContinue)
 }
 
-# Check for Python
-if (-not (Test-Command python)) {
-    Write-Host "ERROR: Python is required but not found in PATH." -ForegroundColor Red
-    Write-Host "Please install Python 3.12 from https://www.python.org/downloads/" -ForegroundColor Yellow
-    exit 1
+function Test-Python312 {
+    param(
+        [string]$CommandName,
+        [string[]]$CommandArgs = @()
+    )
+    if (-not (Test-Command $CommandName)) {
+        return $false
+    }
+
+    try {
+        & $CommandName @CommandArgs -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
 }
 
-# Check Python version
-$pythonVersion = python --version 2>&1 | Out-String
-if ($pythonVersion -match "Python (\d+)\.(\d+)") {
-    $major = [int]$Matches[1]
-    $minor = [int]$Matches[2]
-    if ($major -ne 3 -or $minor -lt 10 -or $minor -gt 12) {
-        Write-Host "ERROR: Python 3.10-3.12 is required for Windows. Found: $pythonVersion" -ForegroundColor Red
-        Write-Host "Download Python 3.12 from https://www.python.org/downloads/" -ForegroundColor Yellow
-        Write-Host "Note: Python 3.13+ is not supported on Windows." -ForegroundColor Yellow
+function Resolve-Python312 {
+    if (Test-Python312 -CommandName "py" -CommandArgs @("-3.12")) {
+        return @{
+            Exe = "py"
+            Args = @("-3.12")
+        }
+    }
+    if (Test-Python312 -CommandName "python") {
+        return @{
+            Exe = "python"
+            Args = @()
+        }
+    }
+    return $null
+}
+
+function Install-Python312 {
+    Write-Host "Python 3.12 not found. Installing Python 3.12.2..." -ForegroundColor Yellow
+    Write-Host "Downloading installer from $PythonInstallerUrl" -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $PythonInstallerUrl -OutFile $PythonInstallerPath
+    Start-Process -FilePath $PythonInstallerPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1" -Wait
+    Remove-Item -Path $PythonInstallerPath -ErrorAction SilentlyContinue
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
+function Invoke-Python {
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Arguments
+    )
+    & $script:PythonExe @($script:PythonExeArgs) @Arguments
+}
+
+$pythonCmd = Resolve-Python312
+if (-not $pythonCmd) {
+    Install-Python312
+    $pythonCmd = Resolve-Python312
+    if (-not $pythonCmd) {
+        Write-Host "ERROR: Unable to locate Python 3.12 after installation." -ForegroundColor Red
+        Write-Host "Open a new PowerShell terminal and run this script again." -ForegroundColor Yellow
         exit 1
     }
 }
+$PythonExe = $pythonCmd.Exe
+$PythonExeArgs = $pythonCmd.Args
+Write-Host "Using Python launcher: $PythonExe $($PythonExeArgs -join ' ')" -ForegroundColor Green
 
 # Check for Git
 if (-not (Test-Command git)) {
@@ -84,7 +132,7 @@ if (Test-Path "update") {
 # Create virtual environment
 if (-not (Test-Path "venv")) {
     Write-Host "Creating virtual environment..." -ForegroundColor Cyan
-    python -m venv venv
+    Invoke-Python -m venv venv
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Failed to create virtual environment" -ForegroundColor Red
         exit 1

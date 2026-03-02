@@ -181,7 +181,7 @@ For example, ZIP code `08544` (Princeton, NJ) automatically adds NWS New Jersey 
 
 ## Requirements
 - **Python 3.10+** (Linux/macOS)
-- **Python 3.10-3.12** (Windows - cannot exceed 3.12)
+- **Python 3.12** (Windows)
 - Git (for cloning/updating)
 - Ollama (automatically installed by quickstart scripts)
 
@@ -236,7 +236,8 @@ cd vigilant-core
 > **Note:** Unlike Linux/macOS, Windows users need to clone the repository first. The remote curl/wget approach doesn't work well on Windows due to PowerShell execution policies.
 
 **What the quickstart scripts do:**
-- ✅ Install/check Python and Git
+- ✅ Ensure Python 3.12 is available on Windows (auto-installs if missing)
+- ✅ Install/check Git
 - ✅ Clone or update the repository
 - ✅ Create and activate virtual environment
 - ✅ Install all Python dependencies
@@ -260,7 +261,7 @@ cd vigilant-core
 - All installations work without sudo
 
 **Windows:**
-- **Python 3.10-3.12 required** - Versions 3.13+ are not supported
+- **Python 3.12 required** for consistent Windows dependency support
 - Requires [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/) for automatic Ollama installation
 - winget included with Windows 11 and Windows 10 (recent versions)
 - Alternative: Manual Ollama download from [ollama.com/download](https://ollama.com/download)
@@ -279,7 +280,7 @@ cd vigilant-core
 - You can cancel (Ctrl+C) and continue later with: `ollama pull llama3.2:1b`
 
 **"Python not found" or "Git not found"**
-- **Windows:** Install Python 3.10-3.12 (not 3.13+) from [python.org](https://www.python.org/downloads/)
+- **Windows:** Install Python 3.12 from [python.org](https://www.python.org/downloads/release/python-3122/)
 - **Linux/macOS:** Install Python 3.10+ from your package manager or [python.org](https://www.python.org/downloads/)
 - Install Git from [git-scm.com](https://git-scm.com/downloads)
 - Ensure both are added to your system PATH

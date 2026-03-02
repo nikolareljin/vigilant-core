@@ -10,14 +10,8 @@ set "TARGET_DIR_DEFAULT=vigilant-core"
 if not defined REPO_URL set "REPO_URL=%REPO_URL_DEFAULT%"
 if not defined TARGET_DIR set "TARGET_DIR=%TARGET_DIR_DEFAULT%"
 
-REM Check for Python
-where python >nul 2>&1
-if errorlevel 1 (
-    echo Python is required but not found in PATH.
-    echo Please install Python 3.10-3.12 from https://www.python.org/downloads/
-    echo Note: Python 3.13+ is not supported on Windows.
-    exit /b 1
-)
+call :resolve_python_312
+if errorlevel 1 exit /b 1
 
 REM Check for Git
 where git >nul 2>&1
@@ -54,7 +48,7 @@ if exist "update" (
 REM Create virtual environment
 if not exist "venv" (
     echo Creating virtual environment...
-    python -m venv venv
+    %PYTHON_LAUNCH% -m venv venv
     if errorlevel 1 (
         echo Failed to create virtual environment
         exit /b 1
@@ -121,3 +115,56 @@ echo Starting VigilantCore web dashboard...
 python -m src.web_app
 
 endlocal
+exit /b %ERRORLEVEL%
+
+:resolve_python_312
+set "PYTHON_CMD="
+set "PYTHON_ARGS="
+set "PYTHON_LAUNCH="
+
+py -3.12 -c "import sys" >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=py"
+    set "PYTHON_ARGS=-3.12"
+    goto :python_ready
+)
+
+where python >nul 2>&1
+if not errorlevel 1 (
+    python -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON_CMD=python"
+        set "PYTHON_ARGS="
+        goto :python_ready
+    )
+)
+
+echo Python 3.12 is required. Attempting to install Python 3.12.2...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe' -OutFile \"$env:TEMP\\python-3.12.2-amd64.exe\"; Start-Process -FilePath \"$env:TEMP\\python-3.12.2-amd64.exe\" -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1' -Wait"
+
+py -3.12 -c "import sys" >nul 2>&1
+if not errorlevel 1 (
+    set "PYTHON_CMD=py"
+    set "PYTHON_ARGS=-3.12"
+    goto :python_ready
+)
+
+where python >nul 2>&1
+if not errorlevel 1 (
+    python -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON_CMD=python"
+        set "PYTHON_ARGS="
+        goto :python_ready
+    )
+)
+
+echo ERROR: Could not find Python 3.12 in PATH after installation.
+echo Open a new terminal and run this script again.
+echo If needed, install manually from https://www.python.org/downloads/release/python-3122/
+exit /b 1
+
+:python_ready
+set "PYTHON_LAUNCH=%PYTHON_CMD% %PYTHON_ARGS%"
+echo Using Python launcher: %PYTHON_LAUNCH%
+exit /b 0
