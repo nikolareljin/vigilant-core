@@ -47,6 +47,21 @@ if exist "update" (
 )
 
 REM Create virtual environment
+REM If an existing venv is not Python 3.12, recreate it to enforce compatibility.
+if exist "venv\Scripts\python.exe" (
+    set "VENV_PY_VER="
+    for /f "usebackq delims=" %%v in (`venv\Scripts\python.exe -c "import sys; print(str(sys.version_info[0]) + '.' + str(sys.version_info[1]))"`) do set "VENV_PY_VER=%%v"
+    if not "!VENV_PY_VER!"=="3.12" (
+        echo Existing virtual environment uses Python !VENV_PY_VER!, but Python 3.12 is required. Recreating virtual environment...
+        rmdir /s /q "venv"
+    )
+) else (
+    if exist "venv" (
+        echo Existing virtual environment is invalid or missing python.exe. Recreating virtual environment...
+        rmdir /s /q "venv"
+    )
+)
+
 if not exist "venv" (
     echo Creating virtual environment...
     %PYTHON_LAUNCH% -m venv venv
