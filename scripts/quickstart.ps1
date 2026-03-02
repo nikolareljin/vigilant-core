@@ -139,7 +139,7 @@ if (-not $pythonCmd) {
     if (-not $pythonCmd) {
         Write-Host "Python 3.12 installation completed, but this terminal cannot see the updated PATH yet." -ForegroundColor Yellow
         Write-Host "Close this PowerShell window, open a new one, and run this script again." -ForegroundColor Yellow
-        exit 0
+        exit 2
     }
 }
 $PythonExe = $pythonCmd.Exe
@@ -178,6 +178,18 @@ if (Test-Path "update") {
 }
 
 # Create virtual environment
+# Ensure existing venv uses Python 3.12; recreate if stale or invalid.
+if (Test-Path ".\venv\Scripts\python.exe") {
+    $venvVersion = (& .\venv\Scripts\python.exe -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>$null | Out-String).Trim()
+    if ($venvVersion -ne "3.12") {
+        Write-Host "Existing virtual environment uses Python $venvVersion, but 3.12 is required. Recreating virtual environment..." -ForegroundColor Yellow
+        Remove-Item -Path ".\venv" -Recurse -Force
+    }
+} elseif (Test-Path "venv") {
+    Write-Host "Existing virtual environment is invalid or missing python.exe. Recreating virtual environment..." -ForegroundColor Yellow
+    Remove-Item -Path ".\venv" -Recurse -Force
+}
+
 if (-not (Test-Path "venv")) {
     Write-Host "Creating virtual environment..." -ForegroundColor Cyan
     Invoke-Python -Arguments @("-m", "venv", "venv")
