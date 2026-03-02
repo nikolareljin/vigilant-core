@@ -26,6 +26,12 @@ if errorlevel 1 (
     echo Expected version format X.Y.Z containing digits and dots only.
     exit /b 1
 )
+echo(%PYTHON_VERSION%| findstr /R "^3\.12\.[0-9][0-9]*$" >nul
+if errorlevel 1 (
+    echo ERROR: Unsupported Python version "%PYTHON_VERSION%" in %PYTHON_VERSION_FILE%.
+    echo This quickstart script requires Python 3.12.X to match :resolve_python_312.
+    exit /b 1
+)
 set "PYTHON_RELEASE_TAG=%PYTHON_VERSION:.=%"
 
 if not defined REPO_URL set "REPO_URL=%REPO_URL_DEFAULT%"
@@ -177,7 +183,7 @@ if not errorlevel 1 (
 )
 
 echo Python 3.12 is required. Attempting to install Python %PYTHON_VERSION%...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$version = '%PYTHON_VERSION%'; $arch = $env:PROCESSOR_ARCHITECTURE; if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }; $fileName = switch -Regex ($arch) { 'ARM64' { 'python-' + $version + '-arm64.exe'; break } '^(x86|X86)$' { 'python-' + $version + '.exe'; break } default { 'python-' + $version + '-amd64.exe' } }; $installer = Join-Path $env:TEMP $fileName; try { $url = 'https://www.python.org/ftp/python/' + $version + '/' + $fileName; Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing; $sig = Get-AuthenticodeSignature -FilePath $installer; if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject.IndexOf('Python Software Foundation', [System.StringComparison]::OrdinalIgnoreCase) -lt 0) { throw 'Python installer signature validation failed.' }; $process = Start-Process -FilePath $installer -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1' -Wait -PassThru; if ($process.ExitCode -ne 0) { throw ('Python installer failed with exit code ' + $process.ExitCode) } } finally { if (Test-Path $installer) { Remove-Item $installer -Force -ErrorAction SilentlyContinue } }"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0python-installer.ps1" -Version "%PYTHON_VERSION%"
 if errorlevel 1 (
     echo ERROR: Python installer failed.
     echo Install Python 3.12 manually from https://www.python.org/downloads/release/python-%PYTHON_RELEASE_TAG%/

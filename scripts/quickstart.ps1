@@ -37,34 +37,17 @@ if ($PythonVersion -notmatch '^\d+\.\d+\.\d+$' -or $PythonVersion.Contains('/') 
     Write-Host "ERROR: Invalid Python version format in $PythonVersionFile. Expected X.Y.Z without path separators." -ForegroundColor Red
     exit 1
 }
-$PythonBaseUrl = "https://www.python.org/ftp/python/$PythonVersion"
-$PythonExpectedPublisher = "Python Software Foundation"
+if ($PythonVersion -notmatch '^3\.12\.') {
+    Write-Host "ERROR: Unsupported Python version '$PythonVersion' in $PythonVersionFile. This script currently requires Python 3.12.x." -ForegroundColor Red
+    exit 1
+}
+$PythonInstallerHelper = Join-Path $PSScriptRoot "python-installer.ps1"
+if (-not (Test-Path $PythonInstallerHelper)) {
+    Write-Host "ERROR: Missing Python installer helper: $PythonInstallerHelper" -ForegroundColor Red
+    exit 1
+}
 $PythonExe = $null
 $PythonExeArgs = @()
-
-function Get-PythonInstallerInfo {
-    $effectiveArch = $env:PROCESSOR_ARCHITECTURE
-    if ($env:PROCESSOR_ARCHITEW6432) {
-        $effectiveArch = $env:PROCESSOR_ARCHITEW6432
-    }
-
-    switch -Regex ($effectiveArch) {
-        "ARM64" {
-            $installerFile = "python-$PythonVersion-arm64.exe"
-        }
-        "^(x86|X86)$" {
-            $installerFile = "python-$PythonVersion.exe"
-        }
-        default {
-            $installerFile = "python-$PythonVersion-amd64.exe"
-        }
-    }
-
-    return @{
-        Url  = "$PythonBaseUrl/$installerFile"
-        Path = Join-Path $env:TEMP $installerFile
-    }
-}
 
 # Function to check if command exists
 function Test-Command {
@@ -106,34 +89,11 @@ function Resolve-Python312 {
 }
 
 function Install-Python312 {
-    $installer = Get-PythonInstallerInfo
-    $pythonInstallerUrl = $installer.Url
-    $pythonInstallerPath = $installer.Path
     Write-Host "Python 3.12 not found. Installing Python $PythonVersion..." -ForegroundColor Yellow
-    Write-Host "Downloading installer from $pythonInstallerUrl" -ForegroundColor Cyan
-    try {
-        if ($PSVersionTable.PSVersion.Major -ge 6) {
-            Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath
-        } else {
-            Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath -UseBasicParsing
-        }
-
-        # Validate Authenticode signature before execution.
-        $sig = Get-AuthenticodeSignature -FilePath $pythonInstallerPath
-        if ($sig.Status -ne "Valid" -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject.IndexOf($PythonExpectedPublisher, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
-            Write-Host "ERROR: Python installer signature validation failed." -ForegroundColor Red
-            return $false
-        }
-
-        # Install per-user so quickstart works in non-admin shells.
-        $installerProcess = Start-Process -FilePath $pythonInstallerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1" -Wait -PassThru
-        if ($installerProcess.ExitCode -ne 0) {
-            Write-Host "ERROR: Python installer failed with exit code $($installerProcess.ExitCode)." -ForegroundColor Red
-            Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
-            return $false
-        }
-    } finally {
-        Remove-Item -Path $pythonInstallerPath -ErrorAction SilentlyContinue
+    & $PythonInstallerHelper -Version $PythonVersion
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
+        return $false
     }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
     return $true
