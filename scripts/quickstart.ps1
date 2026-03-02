@@ -23,11 +23,35 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$PythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
-$PythonInstallerPath = Join-Path $env:TEMP "python-3.12.2-amd64.exe"
+$PythonVersion = "3.12.2"
+$PythonBaseUrl = "https://www.python.org/ftp/python/$PythonVersion"
 $PythonExpectedPublisher = "Python Software Foundation"
 $PythonExe = $null
 $PythonExeArgs = @()
+
+function Get-PythonInstallerInfo {
+    $effectiveArch = $env:PROCESSOR_ARCHITECTURE
+    if ($env:PROCESSOR_ARCHITEW6432) {
+        $effectiveArch = $env:PROCESSOR_ARCHITEW6432
+    }
+
+    switch -Regex ($effectiveArch) {
+        "ARM64" {
+            $installerFile = "python-$PythonVersion-arm64.exe"
+        }
+        "^(x86|X86)$" {
+            $installerFile = "python-$PythonVersion.exe"
+        }
+        default {
+            $installerFile = "python-$PythonVersion-amd64.exe"
+        }
+    }
+
+    return @{
+        Url  = "$PythonBaseUrl/$installerFile"
+        Path = Join-Path $env:TEMP $installerFile
+    }
+}
 
 # Function to check if command exists
 function Test-Command {
@@ -69,27 +93,30 @@ function Resolve-Python312 {
 }
 
 function Install-Python312 {
+    $installer = Get-PythonInstallerInfo
+    $pythonInstallerUrl = $installer.Url
+    $pythonInstallerPath = $installer.Path
     Write-Host "Python 3.12 not found. Installing Python 3.12.2..." -ForegroundColor Yellow
-    Write-Host "Downloading installer from $PythonInstallerUrl" -ForegroundColor Cyan
+    Write-Host "Downloading installer from $pythonInstallerUrl" -ForegroundColor Cyan
     try {
-        Invoke-WebRequest -Uri $PythonInstallerUrl -OutFile $PythonInstallerPath
+        Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath -UseBasicParsing
 
         # Validate Authenticode signature before execution.
-        $sig = Get-AuthenticodeSignature -FilePath $PythonInstallerPath
-        if ($sig.Status -ne "Valid" -or -not $sig.SignerCertificate -or -not $sig.SignerCertificate.Subject.Contains($PythonExpectedPublisher)) {
+        $sig = Get-AuthenticodeSignature -FilePath $pythonInstallerPath
+        if ($sig.Status -ne "Valid" -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject.IndexOf($PythonExpectedPublisher, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
             Write-Host "ERROR: Python installer signature validation failed." -ForegroundColor Red
             return $false
         }
 
         # Install per-user so quickstart works in non-admin shells.
-        $installerProcess = Start-Process -FilePath $PythonInstallerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1" -Wait -PassThru
+        $installerProcess = Start-Process -FilePath $pythonInstallerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1" -Wait -PassThru
         if ($installerProcess.ExitCode -ne 0) {
             Write-Host "ERROR: Python installer failed with exit code $($installerProcess.ExitCode)." -ForegroundColor Red
             Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
             return $false
         }
     } finally {
-        Remove-Item -Path $PythonInstallerPath -ErrorAction SilentlyContinue
+        Remove-Item -Path $pythonInstallerPath -ErrorAction SilentlyContinue
     }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
     return $true
