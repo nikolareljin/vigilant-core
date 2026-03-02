@@ -90,7 +90,8 @@ function Resolve-Python312 {
 
 function Install-Python312 {
     Write-Host "Python 3.12 not found. Installing Python $PythonVersion..." -ForegroundColor Yellow
-    & $PythonInstallerHelper -Version $PythonVersion
+    $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File $PythonInstallerHelper -Version $PythonVersion
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
         return $false

@@ -225,8 +225,7 @@ cd vigilant-core
 
 **PowerShell (Recommended):**
 ```powershell
-$env:TARGET_DIR="."
-.\scripts\quickstart.ps1
+.\scripts\quickstart.ps1 -TargetDir "."
 ```
 
 **Command Prompt:**

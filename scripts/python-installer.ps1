@@ -13,7 +13,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$expectedPublisher = "Python Software Foundation"
+$expectedPublisherSubjectPattern = '^CN=Python Software Foundation(?:,|$)'
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Version.Contains('/') -or $Version.Contains('\')) {
     Write-Host "ERROR: Invalid Python version '$Version'. Expected X.Y.Z without path separators." -ForegroundColor Red
@@ -56,7 +56,7 @@ try {
     }
 
     $sig = Get-AuthenticodeSignature -FilePath $installerPath
-    if ($sig.Status -ne "Valid" -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject.IndexOf($expectedPublisher, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+    if ($sig.Status -ne "Valid" -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject -notmatch $expectedPublisherSubjectPattern) {
         Write-Host "ERROR: Python installer signature validation failed." -ForegroundColor Red
         exit 1
     }
