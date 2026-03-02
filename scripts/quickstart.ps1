@@ -23,7 +23,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$PythonVersion = "3.12.2"
+$PythonVersionFile = Join-Path $PSScriptRoot "python-version.txt"
+if (-not (Test-Path $PythonVersionFile)) {
+    Write-Host "ERROR: Missing Python version file: $PythonVersionFile" -ForegroundColor Red
+    exit 1
+}
+$PythonVersion = (Get-Content -Path $PythonVersionFile -ErrorAction Stop | Select-Object -First 1).Trim()
+if (-not $PythonVersion) {
+    Write-Host "ERROR: Python version file is empty: $PythonVersionFile" -ForegroundColor Red
+    exit 1
+}
 $PythonBaseUrl = "https://www.python.org/ftp/python/$PythonVersion"
 $PythonExpectedPublisher = "Python Software Foundation"
 $PythonExe = $null
@@ -99,7 +108,11 @@ function Install-Python312 {
     Write-Host "Python 3.12 not found. Installing Python 3.12.2..." -ForegroundColor Yellow
     Write-Host "Downloading installer from $pythonInstallerUrl" -ForegroundColor Cyan
     try {
-        Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath -UseBasicParsing
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath
+        } else {
+            Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $pythonInstallerPath -UseBasicParsing
+        }
 
         # Validate Authenticode signature before execution.
         $sig = Get-AuthenticodeSignature -FilePath $pythonInstallerPath

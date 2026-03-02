@@ -6,6 +6,20 @@ setlocal EnableDelayedExpansion
 
 set "REPO_URL_DEFAULT=https://github.com/nikolareljin/vigilant-core.git"
 set "TARGET_DIR_DEFAULT=vigilant-core"
+set "PYTHON_VERSION_FILE=%~dp0python-version.txt"
+set "PYTHON_VERSION="
+
+if not exist "%PYTHON_VERSION_FILE%" (
+    echo ERROR: Missing Python version file: %PYTHON_VERSION_FILE%
+    exit /b 1
+)
+for /f "usebackq delims=" %%v in ("%PYTHON_VERSION_FILE%") do (
+    if not defined PYTHON_VERSION set "PYTHON_VERSION=%%v"
+)
+if not defined PYTHON_VERSION (
+    echo ERROR: Python version file is empty: %PYTHON_VERSION_FILE%
+    exit /b 1
+)
 
 if not defined REPO_URL set "REPO_URL=%REPO_URL_DEFAULT%"
 if not defined TARGET_DIR set "TARGET_DIR=%TARGET_DIR_DEFAULT%"
@@ -155,8 +169,8 @@ if not errorlevel 1 (
     )
 )
 
-echo Python 3.12 is required. Attempting to install Python 3.12.2...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$version = '3.12.2'; $arch = $env:PROCESSOR_ARCHITECTURE; if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }; $fileName = switch -Regex ($arch) { 'ARM64' { 'python-' + $version + '-arm64.exe'; break } '^(x86|X86)$' { 'python-' + $version + '.exe'; break } default { 'python-' + $version + '-amd64.exe' } }; $installer = Join-Path $env:TEMP $fileName; try { $url = 'https://www.python.org/ftp/python/' + $version + '/' + $fileName; Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing; $sig = Get-AuthenticodeSignature -FilePath $installer; if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject.IndexOf('Python Software Foundation', [System.StringComparison]::OrdinalIgnoreCase) -lt 0) { throw 'Python installer signature validation failed.' }; $process = Start-Process -FilePath $installer -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1' -Wait -PassThru; if ($process.ExitCode -ne 0) { throw ('Python installer failed with exit code ' + $process.ExitCode) } } finally { if (Test-Path $installer) { Remove-Item $installer -Force -ErrorAction SilentlyContinue } }"
+echo Python 3.12 is required. Attempting to install Python %PYTHON_VERSION%...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$version = '%PYTHON_VERSION%'; $arch = $env:PROCESSOR_ARCHITECTURE; if ($env:PROCESSOR_ARCHITEW6432) { $arch = $env:PROCESSOR_ARCHITEW6432 }; $fileName = switch -Regex ($arch) { 'ARM64' { 'python-' + $version + '-arm64.exe'; break } '^(x86|X86)$' { 'python-' + $version + '.exe'; break } default { 'python-' + $version + '-amd64.exe' } }; $installer = Join-Path $env:TEMP $fileName; try { $url = 'https://www.python.org/ftp/python/' + $version + '/' + $fileName; Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing; $sig = Get-AuthenticodeSignature -FilePath $installer; if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject.IndexOf('Python Software Foundation', [System.StringComparison]::OrdinalIgnoreCase) -lt 0) { throw 'Python installer signature validation failed.' }; $process = Start-Process -FilePath $installer -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1' -Wait -PassThru; if ($process.ExitCode -ne 0) { throw ('Python installer failed with exit code ' + $process.ExitCode) } } finally { if (Test-Path $installer) { Remove-Item $installer -Force -ErrorAction SilentlyContinue } }"
 if errorlevel 1 (
     echo ERROR: Python installer failed.
     echo Install Python 3.12 manually from https://www.python.org/downloads/release/python-3122/
@@ -164,7 +178,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Python 3.12.2 installer has completed.
+echo Python %PYTHON_VERSION% installer has completed.
 echo Your current CMD session may not see the updated PATH yet.
 echo Please close this window, open a new terminal, and run this script again.
 echo If needed, install manually from https://www.python.org/downloads/release/python-3122/
