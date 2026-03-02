@@ -80,12 +80,14 @@ if exist "venv\Scripts\python.exe" (
     for /f "usebackq delims=" %%v in (`venv\Scripts\python.exe -c "import sys; print(str(sys.version_info[0]) + '.' + str(sys.version_info[1]))"`) do set "VENV_PY_VER=%%v"
     if not "!VENV_PY_VER!"=="3.12" (
         echo Existing virtual environment uses Python !VENV_PY_VER!, but Python 3.12 is required. Recreating virtual environment...
-        rmdir /s /q "venv"
+        call :safe_remove_venv
+        if errorlevel 1 exit /b 1
     )
 ) else (
     if exist "venv" (
         echo Existing virtual environment is invalid or missing python.exe. Recreating virtual environment...
-        rmdir /s /q "venv"
+        call :safe_remove_venv
+        if errorlevel 1 exit /b 1
     )
 )
 
@@ -200,4 +202,19 @@ exit /b 2
 :python_ready
 set "PYTHON_LAUNCH=%PYTHON_CMD% %PYTHON_ARGS%"
 echo Using Python launcher: %PYTHON_LAUNCH%
+exit /b 0
+
+:safe_remove_venv
+if not exist "venv" exit /b 0
+fsutil reparsepoint query "venv" >nul 2>&1
+if not errorlevel 1 (
+    echo ERROR: Refusing to delete "venv" because it is a symlink/junction.
+    echo Please remove or fix it manually, then run quickstart again.
+    exit /b 1
+)
+rmdir /s /q "venv"
+if errorlevel 1 (
+    echo ERROR: Failed to remove existing "venv" directory.
+    exit /b 1
+)
 exit /b 0

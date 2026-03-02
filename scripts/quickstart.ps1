@@ -116,6 +116,26 @@ function Install-Python312 {
     return $true
 }
 
+function Remove-VenvDirectorySafely {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        Write-Host "ERROR: Refusing to delete '$Path' because it is a symlink/junction (reparse point)." -ForegroundColor Red
+        Write-Host "Please remove or fix this path manually, then re-run quickstart." -ForegroundColor Yellow
+        exit 1
+    }
+
+    Remove-Item -LiteralPath $Path -Recurse -Force
+}
+
 function Invoke-Python {
     param(
         [Parameter(ValueFromRemainingArguments = $true)]
@@ -177,11 +197,11 @@ if (Test-Path ".\venv\Scripts\python.exe") {
     $venvVersion = (& .\venv\Scripts\python.exe -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>$null | Out-String).Trim()
     if ($venvVersion -ne "3.12") {
         Write-Host "Existing virtual environment uses Python $venvVersion, but 3.12 is required. Recreating virtual environment..." -ForegroundColor Yellow
-        Remove-Item -Path ".\venv" -Recurse -Force
+        Remove-VenvDirectorySafely -Path ".\venv"
     }
 } elseif (Test-Path "venv") {
     Write-Host "Existing virtual environment is invalid or missing python.exe. Recreating virtual environment..." -ForegroundColor Yellow
-    Remove-Item -Path ".\venv" -Recurse -Force
+    Remove-VenvDirectorySafely -Path ".\venv"
 }
 
 if (-not (Test-Path "venv")) {
