@@ -140,29 +140,19 @@ if not errorlevel 1 (
 )
 
 echo Python 3.12 is required. Attempting to install Python 3.12.2...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe' -OutFile \"$env:TEMP\\python-3.12.2-amd64.exe\"; Start-Process -FilePath \"$env:TEMP\\python-3.12.2-amd64.exe\" -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1' -Wait"
-
-py -3.12 -c "import sys" >nul 2>&1
-if not errorlevel 1 (
-    set "PYTHON_CMD=py"
-    set "PYTHON_ARGS=-3.12"
-    goto :python_ready
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$installer = Join-Path $env:TEMP 'python-3.12.2-amd64.exe'; try { Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe' -OutFile $installer; $sig = Get-AuthenticodeSignature -FilePath $installer; if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate -or -not $sig.SignerCertificate.Subject.Contains('Python Software Foundation')) { throw 'Python installer signature validation failed.' }; $process = Start-Process -FilePath $installer -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1' -Wait -PassThru; if ($process.ExitCode -ne 0) { throw ('Python installer failed with exit code ' + $process.ExitCode) } } finally { if (Test-Path $installer) { Remove-Item $installer -Force -ErrorAction SilentlyContinue } }"
+if errorlevel 1 (
+    echo ERROR: Python installer failed.
+    echo Install Python 3.12 manually from https://www.python.org/downloads/release/python-3122/
+    exit /b 1
 )
 
-where python >nul 2>&1
-if not errorlevel 1 (
-    python -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
-    if not errorlevel 1 (
-        set "PYTHON_CMD=python"
-        set "PYTHON_ARGS="
-        goto :python_ready
-    )
-)
-
-echo ERROR: Could not find Python 3.12 in PATH after installation.
-echo Open a new terminal and run this script again.
+echo.
+echo Python 3.12.2 installer has completed.
+echo Your current CMD session may not see the updated PATH yet.
+echo Please close this window, open a new terminal, and run this script again.
 echo If needed, install manually from https://www.python.org/downloads/release/python-3122/
-exit /b 1
+exit /b 0
 
 :python_ready
 set "PYTHON_LAUNCH=%PYTHON_CMD% %PYTHON_ARGS%"

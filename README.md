@@ -281,6 +281,7 @@ cd vigilant-core
 
 **"Python not found" or "Git not found"**
 - **Windows:** Install Python 3.12 from [python.org](https://www.python.org/downloads/release/python-3122/)
+- If quickstart auto-installs Python, close the current terminal and run quickstart again so PATH changes are picked up
 - **Linux/macOS:** Install Python 3.10+ from your package manager or [python.org](https://www.python.org/downloads/)
 - Install Git from [git-scm.com](https://git-scm.com/downloads)
 - Ensure both are added to your system PATH

@@ -25,6 +25,7 @@ param(
 $ErrorActionPreference = "Stop"
 $PythonInstallerUrl = "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe"
 $PythonInstallerPath = Join-Path $env:TEMP "python-3.12.2-amd64.exe"
+$PythonExpectedPublisher = "Python Software Foundation"
 $PythonExe = $null
 $PythonExeArgs = @()
 
@@ -70,10 +71,28 @@ function Resolve-Python312 {
 function Install-Python312 {
     Write-Host "Python 3.12 not found. Installing Python 3.12.2..." -ForegroundColor Yellow
     Write-Host "Downloading installer from $PythonInstallerUrl" -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $PythonInstallerUrl -OutFile $PythonInstallerPath
-    Start-Process -FilePath $PythonInstallerPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1" -Wait
-    Remove-Item -Path $PythonInstallerPath -ErrorAction SilentlyContinue
+    try {
+        Invoke-WebRequest -Uri $PythonInstallerUrl -OutFile $PythonInstallerPath
+
+        # Validate Authenticode signature before execution.
+        $sig = Get-AuthenticodeSignature -FilePath $PythonInstallerPath
+        if ($sig.Status -ne "Valid" -or -not $sig.SignerCertificate -or -not $sig.SignerCertificate.Subject.Contains($PythonExpectedPublisher)) {
+            Write-Host "ERROR: Python installer signature validation failed." -ForegroundColor Red
+            return $false
+        }
+
+        # Install per-user so quickstart works in non-admin shells.
+        $installerProcess = Start-Process -FilePath $PythonInstallerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_pip=1" -Wait -PassThru
+        if ($installerProcess.ExitCode -ne 0) {
+            Write-Host "ERROR: Python installer failed with exit code $($installerProcess.ExitCode)." -ForegroundColor Red
+            Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
+            return $false
+        }
+    } finally {
+        Remove-Item -Path $PythonInstallerPath -ErrorAction SilentlyContinue
+    }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    return $true
 }
 
 function Invoke-Python {
@@ -86,12 +105,14 @@ function Invoke-Python {
 
 $pythonCmd = Resolve-Python312
 if (-not $pythonCmd) {
-    Install-Python312
+    if (-not (Install-Python312)) {
+        exit 1
+    }
     $pythonCmd = Resolve-Python312
     if (-not $pythonCmd) {
-        Write-Host "ERROR: Unable to locate Python 3.12 after installation." -ForegroundColor Red
-        Write-Host "Open a new PowerShell terminal and run this script again." -ForegroundColor Yellow
-        exit 1
+        Write-Host "Python 3.12 installation completed, but this terminal cannot see the updated PATH yet." -ForegroundColor Yellow
+        Write-Host "Close this PowerShell window, open a new one, and run this script again." -ForegroundColor Yellow
+        exit 0
     }
 }
 $PythonExe = $pythonCmd.Exe
