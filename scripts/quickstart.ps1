@@ -28,7 +28,8 @@ if (-not (Test-Path $PythonVersionFile)) {
     Write-Host "ERROR: Missing Python version file: $PythonVersionFile" -ForegroundColor Red
     exit 1
 }
-$PythonVersion = (Get-Content -Path $PythonVersionFile -ErrorAction Stop | Select-Object -First 1).Trim()
+$pythonVersionRaw = Get-Content -Path $PythonVersionFile -ErrorAction Stop | Select-Object -First 1
+$PythonVersion = if ($null -eq $pythonVersionRaw) { "" } else { $pythonVersionRaw.Trim() }
 if (-not $PythonVersion) {
     Write-Host "ERROR: Python version file is empty: $PythonVersionFile" -ForegroundColor Red
     exit 1

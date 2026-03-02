@@ -52,6 +52,8 @@ try {
     if ($PSVersionTable.PSVersion.Major -ge 6) {
         Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
     } else {
+        # Ensure TLS 1.2 is available on Windows PowerShell 5.1 for python.org downloads.
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
     }
 
