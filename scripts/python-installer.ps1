@@ -64,6 +64,9 @@ try {
         Write-Host "ERROR: Python installer failed with exit code $($proc.ExitCode)." -ForegroundColor Red
         exit 1
     }
+} catch {
+    Write-Host ("ERROR: Failed to download or run Python installer from '{0}' to '{1}': {2}" -f $installerUrl, $installerPath, $_.Exception.Message) -ForegroundColor Red
+    exit 1
 } finally {
     Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
 }

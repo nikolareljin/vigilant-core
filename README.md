@@ -280,7 +280,7 @@ cd vigilant-core
 - You can cancel (Ctrl+C) and continue later with: `ollama pull llama3.2:1b`
 
 **"Python not found" or "Git not found"**
-- **Windows:** Install Python 3.12 from [python.org](https://www.python.org/downloads/release/python-3122/)
+- **Windows:** Install Python 3.12.x from [python.org](https://www.python.org/downloads/windows/)
 - If quickstart auto-installs Python, close the current terminal and run quickstart again so PATH changes are picked up
 - **Linux/macOS:** Install Python 3.10+ from your package manager or [python.org](https://www.python.org/downloads/)
 - Install Git from [git-scm.com](https://git-scm.com/downloads)

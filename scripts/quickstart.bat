@@ -29,7 +29,7 @@ if errorlevel 1 (
 echo(%PYTHON_VERSION%| findstr /R "^3\.12\.[0-9][0-9]*$" >nul
 if errorlevel 1 (
     echo ERROR: Unsupported Python version "%PYTHON_VERSION%" in %PYTHON_VERSION_FILE%.
-    echo This quickstart script requires Python 3.12.X to match :resolve_python_312.
+    echo This quickstart script requires Python 3.12.x; the exact patch version is read from scripts\python-version.txt.
     exit /b 1
 )
 set "PYTHON_RELEASE_TAG=%PYTHON_VERSION:.=%"
