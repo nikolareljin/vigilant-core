@@ -193,8 +193,8 @@ Choose the command for your operating system:
 |----------|---------|
 | **Linux** | `curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh \| bash` |
 | **macOS** | `curl -fsSL https://raw.githubusercontent.com/nikolareljin/vigilant-core/main/scripts/quickstart.sh \| bash` |
-| **Windows (PowerShell)** | `.\scripts\quickstart.ps1` (after cloning repo) |
-| **Windows (CMD)** | `.\scripts\quickstart.bat` (after cloning repo) |
+| **Windows (PowerShell)** | `.\scripts\quickstart.ps1 -TargetDir "."` (after cloning repo) |
+| **Windows (CMD)** | `set TARGET_DIR=.` then `.\scripts\quickstart.bat` (after cloning repo) |
 
 ### Linux/macOS
 

@@ -96,7 +96,12 @@ function Install-Python312 {
         Write-Host "Check endpoint protection policy or install Python 3.12 manually." -ForegroundColor Yellow
         return $false
     }
-    # Refresh PATH with machine/user precedence, then append process-only entries.
+    Refresh-PathPreservingCurrent
+    return $true
+}
+
+function Refresh-PathPreservingCurrent {
+    # Keep active process PATH entries (including venv) while prepending machine/user PATH.
     $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
     $currentEntries = ($env:Path -split ';') | Where-Object { $_ -and $_.Trim() -ne '' }
@@ -114,7 +119,6 @@ function Install-Python312 {
         }
     }
     $env:Path = ($allEntries -join ';')
-    return $true
 }
 
 function Remove-VenvDirectorySafely {
@@ -231,8 +235,8 @@ if (-not (Test-Command ollama)) {
         Write-Host "Installing Ollama via winget..." -ForegroundColor Cyan
         winget install -e --id Ollama.Ollama --silent
         
-        # Refresh environment variables
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+        # Refresh PATH while preserving venv/session entries.
+        Refresh-PathPreservingCurrent
         
         # Check if ollama is now available
         if (-not (Test-Command ollama)) {
