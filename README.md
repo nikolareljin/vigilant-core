@@ -530,3 +530,11 @@ Full documentation is available in the `docs/` folder:
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and changes.
 Event schema details: [docs/event-normalization.md](docs/event-normalization.md)
+
+---
+
+## Clone traffic
+
+![Clone traffic](https://raw.githubusercontent.com/nikolareljin/stats/main/charts/vigilant-core.svg)
+
+_Updated daily. Total and unique cloners over the last 14 days._
