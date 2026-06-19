@@ -33,8 +33,8 @@ trust. This schema is the basis for ShelfCast-compatible MQTT output (issue #60)
 | `url` | string \| null | no | Canonical source URL. |
 | `sources` | string[] | no | Provenance (merged source names). |
 | `trust` | enum | no | `untrusted` < `open_search` < `known_feed` < `authenticated_api` < `signed_node`. |
-| `ttl_hops` | integer ≥ 0 | no | Remaining mesh hops; decremented per forward. |
-| `seen_nodes` | string[] | no | Nodes that handled it (loop prevention). |
+| `ttl_hops` | integer ≥ 0 | yes | Remaining mesh hops; decremented per forward. |
+| `seen_nodes` | string[] | yes | Nodes that handled it (loop prevention). |
 | `actions` | object[] | no | Recommended/dispatched actions (`{kind, detail, status}`). |
 | `signature` | string \| null | no | Optional Ed25519 signature (Phase 4). |
 
