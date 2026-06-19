@@ -49,10 +49,15 @@ UNVERIFIED_CEILING = "open_search"
 
 
 def rank(tier: str | None) -> int:
-    """Return a comparable rank for a trust tier (higher = more trusted)."""
+    """Return a comparable rank for a trust tier (higher = more trusted).
 
+    Degrades to the default rank for unknown or non-string input (this helper is
+    called on decoded/untrusted data, so it must not raise)."""
+
+    if not isinstance(tier, str):
+        return TRUST_TIERS.index(DEFAULT_TRUST)
     try:
-        return TRUST_TIERS.index((tier or "").strip().lower())
+        return TRUST_TIERS.index(tier.strip().lower())
     except ValueError:
         return TRUST_TIERS.index(DEFAULT_TRUST)
 
