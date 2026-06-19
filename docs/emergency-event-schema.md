@@ -67,7 +67,7 @@ prompts. `contracts.trust` maps legacy `source_kind`s to tiers and exposes
   "predictive_outcome": "Damaging winds and possible touchdown within 30 minutes.",
   "url": "https://example.gov/alerts/123",
   "sources": ["NWS"],
-  "trust": "known_feed",
+  "trust": "open_search",
   "ttl_hops": 4,
   "seen_nodes": ["01J9Z000V8HKMNPQRSTVWXYZ23"],
   "actions": [],
