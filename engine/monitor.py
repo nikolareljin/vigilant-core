@@ -19,7 +19,11 @@ import feedparser
 import httpx
 import pgeocode
 
-from .parser import ImpactParser
+from .parser import ImpactParser, ParsedImpact
+from contracts import EmergencyEvent
+from mesh.forwarding import ForwardingQueue
+from mesh.node import load_or_create_node
+from plugins import build_registry
 from utils import database
 from utils.config import AppConfig, config_dir
 from utils.event_deduplication import deduplicate_events
@@ -100,6 +104,43 @@ class MonitorEngine:
             prefer_light_model=config.prefer_light_model,
         )
         self.model_name = self._parser.current_model()
+
+        # Platform layer: node identity, plugin kernel, store-and-forward queue.
+        # Wrapped so a field node still monitors even if an optional plugin or
+        # transport dependency is unavailable.
+        self.node = None
+        self.node_id: Optional[str] = None
+        self.registry = None
+        self.forwarding: Optional[ForwardingQueue] = None
+        self._inbound_lock = threading.Lock()
+        self._inbound_events: List[EmergencyEvent] = []
+        try:
+            self.node = load_or_create_node(
+                label=config.node_label, role=config.node_role
+            )
+            self.node_id = self.node.node_id
+            self.registry = build_registry(config, node_id=self.node_id)
+            self.registry.subscribe_ingest(self._buffer_inbound_event)
+            self.forwarding = ForwardingQueue(self.node_id)
+        except Exception:
+            logger.exception("Platform layer init failed; continuing in standalone mode")
+
+    def _buffer_inbound_event(self, event: EmergencyEvent) -> None:
+        """Bus handler for events received from transports (TOPIC_INGEST)."""
+
+        with self._inbound_lock:
+            self._inbound_events.append(event)
+
+    def _drain_inbound_events(self) -> List[EmergencyEvent]:
+        with self._inbound_lock:
+            drained = self._inbound_events
+            self._inbound_events = []
+        return drained
+
+    def get_plugin_health(self) -> List[Dict[str, object]]:
+        """Plugin health snapshots for the dashboard (empty when no plugins)."""
+
+        return self.registry.health() if self.registry else []
 
     def _is_source_enabled(self, source_key: str) -> bool:
         if source_key == "rss":
@@ -967,6 +1008,9 @@ class MonitorEngine:
             combined = []
             for group in results:
                 combined.extend(group)
+        plugin_items = await self._gather_plugin_items()
+        if plugin_items:
+            combined.extend(plugin_items)
         logger.info("Fetched %d raw items before filtering", len(combined))
         seen = set()
         filtered_items = []
@@ -1030,6 +1074,66 @@ class MonitorEngine:
             "https://news.google.com/rss/search"
             f"?q={query}&hl=en-US&gl=US&ceid=US:en"
         )
+
+    async def _gather_plugin_items(self) -> List[AlertItem]:
+        """Pull events from source plugins and buffered inbound transports.
+
+        These re-enter the normal dedup/store pipeline as ``AlertItem``s, so they
+        get the same location filtering and dedup as native fetchers.
+        """
+
+        if self.registry is None:
+            return []
+        events: List[EmergencyEvent] = []
+        try:
+            events.extend(await self.registry.poll_sources())
+        except Exception:
+            logger.exception("Source plugin polling failed")
+        events.extend(self._drain_inbound_events())
+        return [self._event_to_alert_item(event) for event in events]
+
+    @staticmethod
+    def _event_to_alert_item(event: EmergencyEvent) -> AlertItem:
+        source = event.sources[0] if event.sources else "plugin"
+        return AlertItem(
+            url=event.url or event.event_id,
+            title=event.title,
+            snippet=event.summary,
+            published_at=event.event_timestamp_utc,
+            source=source,
+            source_kind="plugin",
+        )
+
+    def _publish_platform_event(
+        self,
+        item: AlertItem,
+        parsed: ParsedImpact,
+        normalized: Dict,
+    ) -> None:
+        """Emit a stored alert as an EmergencyEvent to the mesh + egress plugins."""
+
+        if self.registry is None and self.forwarding is None:
+            return
+        try:
+            event = EmergencyEvent.from_normalized(
+                normalized=normalized,
+                title=item.title,
+                snippet=item.snippet,
+                impact_score=parsed.impact_score,
+                predictive_outcome=parsed.predictive_outcome,
+                url=item.url,
+                source=item.source,
+                source_kind=item.source_kind,
+                merged_sources=item.merged_sources,
+                origin_node_id=self.node_id,
+            )
+            # Stamp this node + enqueue a hop for forwarding (store-and-forward).
+            if self.forwarding is not None:
+                self.forwarding.offer(event)
+            if self.registry is not None:
+                self.registry.publish(event)
+        except Exception:
+            logger.exception("Failed to publish platform event for %s", item.url)
 
     async def process_items(self, items: Iterable[AlertItem]) -> int:
         new_count = 0
@@ -1098,6 +1202,7 @@ class MonitorEngine:
                             "created_at": datetime.utcnow().isoformat(),
                         }
                     )
+                self._publish_platform_event(item, parsed, normalized)
         logger.info("Processed %d items, inserted %d", total, new_count)
         return new_count
 
