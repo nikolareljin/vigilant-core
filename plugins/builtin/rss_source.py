@@ -49,9 +49,11 @@ class RssSourcePlugin(SourcePlugin):
         latitude = getattr(config, "latitude", None) if config else None
         longitude = getattr(config, "longitude", None) if config else None
 
-        timeout = httpx.Timeout(coerce_float(self.options.get("timeout", 20), 20.0))
         feed_errors = 0
         try:
+            # Inside the try so an invalid timeout (e.g. negative) is caught by the
+            # plugin's own error/health path rather than escaping the coroutine.
+            timeout = httpx.Timeout(coerce_float(self.options.get("timeout", 20), 20.0))
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 for feed_url in feeds:
                     try:
