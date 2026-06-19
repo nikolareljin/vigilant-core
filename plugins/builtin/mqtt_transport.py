@@ -146,7 +146,7 @@ class MqttTransportPlugin(TransportPlugin):
         rc = getattr(result, "rc", 0)
         if rc not in (0, None):
             raise RuntimeError(f"MQTT publish to {topic} failed rc={rc}")
-        logger.debug("MQTT %s -> %s (%d bytes)", self.name, topic, len(payload))
+        logger.debug("MQTT %s -> %s (%d chars)", self.name, topic, len(payload))
 
     def published_topics_for(self, event: EmergencyEvent) -> list[str]:
         """Topics ``send`` would target for ``event`` (handy for tests/docs)."""
