@@ -220,6 +220,18 @@ class EmergencyEventContractTests(unittest.TestCase):
         self.assertTrue(trust.is_trusted_for_automation("authenticated_api"))
         self.assertFalse(trust.is_trusted_for_automation("open_search"))
 
+    def test_strict_decode_caps_self_declared_trust(self) -> None:
+        # An unauthenticated peer must not promote itself across the automation
+        # boundary by self-declaring a high trust tier on the wire.
+        event = EmergencyEvent(title="t", severity="high", confidence=0.5,
+                               impact_score=6, trust="signed_node")
+        decoded = EmergencyEvent.from_json(event.to_json())
+        self.assertEqual(decoded.trust, "open_search")
+        self.assertFalse(trust.is_trusted_for_automation(decoded.trust))
+        # Lenient (local) construction keeps the declared tier.
+        local = EmergencyEvent.from_dict(event.to_dict())  # strict=False
+        self.assertEqual(local.trust, "signed_node")
+
     def test_emergency_search_is_open_search_not_curated(self) -> None:
         # emergency_search runs open-web queries, so it must not be trusted for
         # automation as if it were a curated feed (issue #70 boundary).

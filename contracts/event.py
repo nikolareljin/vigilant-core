@@ -194,6 +194,10 @@ class EmergencyEvent:
             filtered["title"] = data.get("title") or "(no title)"
         event = cls(**filtered)
         if strict:
+            # Unauthenticated transport: a sender must not self-declare a tier
+            # above the unverified ceiling (Phase 4 signature verification will
+            # lift this for events that prove it).
+            event.trust = trust_tiers.cap_unverified(event.trust)
             event.validate()
         return event
 

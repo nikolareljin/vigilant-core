@@ -40,6 +40,13 @@ SOURCE_KIND_TRUST: dict[str, str] = {
 
 DEFAULT_TRUST = "open_search"
 
+# The highest trust a payload may *self-declare* over an unauthenticated
+# transport. Tiers above this (known_feed and up — the automation-eligible band)
+# require verification the receiver does not yet have (authenticated transport or
+# a valid signature, Phase 4), so unverified inbound events are clamped here to
+# stop a peer from self-promoting across the automation boundary.
+UNVERIFIED_CEILING = "open_search"
+
 
 def rank(tier: str | None) -> int:
     """Return a comparable rank for a trust tier (higher = more trusted)."""
@@ -60,3 +67,17 @@ def is_trusted_for_automation(tier: str | None, *, minimum: str = "known_feed") 
     """Whether an event at ``tier`` is trusted enough to drive automated actions."""
 
     return rank(tier) >= rank(minimum)
+
+
+def cap_unverified(tier: str | None) -> str:
+    """Clamp a self-declared trust tier to :data:`UNVERIFIED_CEILING`.
+
+    Applied to events decoded from an unauthenticated transport so a sender
+    cannot self-declare ``authenticated_api``/``signed_node`` and have the
+    receiver act on it. Phase 4 signature verification will re-establish higher
+    trust for events that actually prove it.
+    """
+
+    if rank(tier) > rank(UNVERIFIED_CEILING):
+        return UNVERIFIED_CEILING
+    return tier if tier in TRUST_TIERS else DEFAULT_TRUST
