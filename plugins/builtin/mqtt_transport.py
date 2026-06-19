@@ -3,7 +3,7 @@
 Outbound: every event is published as schema-valid JSON to
 ``<base_topic>/normalized``; high-priority events (severity high/critical OR
 ``impact_score >= 7``) additionally go to ``<base_topic>/high_priority``
-(issues #57/#58/#59, schema #60). Inbound:
+(issues #57/#58, schema #60). Inbound:
 when ``subscribe_inbound`` is set, events received on ``<base_topic>/ingest``
 are republished to the local bus' ``TOPIC_INGEST`` so they re-enter the pipeline.
 

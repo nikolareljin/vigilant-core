@@ -70,9 +70,9 @@ class PluginRegistry:
             try:
                 plugin.start(self._context_for(plugin))
                 self._wire_egress(plugin)
-            except Exception:
+            except Exception as exc:
                 logger.exception("Failed to start plugin %s", plugin.name)
-                plugin.health.record_error("start failed")
+                plugin.health.record_error(f"start failed: {exc}")
         self._started = True
 
     def _subscribe_egress(self, topic: str, handler: Callable[[EmergencyEvent], None]) -> None:
@@ -140,6 +140,18 @@ class PluginRegistry:
                 # not double-count the success path.
                 logger.warning("Source plugin %s poll failed: %s", plugin.name, result)
                 plugin.health.record_error(str(result))
+                continue
+            if not isinstance(result, list):
+                # A misbehaving plugin (returns None or a single event) must not
+                # abort polling for the others — keep the isolation guarantee.
+                logger.warning(
+                    "Source plugin %s returned %s, expected list; skipping",
+                    plugin.name,
+                    type(result).__name__,
+                )
+                plugin.health.record_error(
+                    f"poll returned {type(result).__name__}, expected list"
+                )
                 continue
             events.extend(result)
         return events

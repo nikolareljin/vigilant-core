@@ -188,6 +188,21 @@ class SourcePluginPollTests(unittest.TestCase):
         events = asyncio.run(registry.poll_sources())
         self.assertEqual(len(events), 2)
 
+    def test_poll_sources_isolates_nonlist_return(self) -> None:
+        class BadShape(SourcePlugin):
+            async def poll(self, ctx: PluginContext):
+                return None  # not a list
+
+        class GoodSource(SourcePlugin):
+            async def poll(self, ctx: PluginContext):
+                return [_event("low")]
+
+        registry = build_registry(_Cfg([]), node_id="NODE-A")
+        registry.register(BadShape("bad"))
+        registry.register(GoodSource("good"))
+        events = asyncio.run(registry.poll_sources())
+        self.assertEqual(len(events), 1)  # good plugin still collected
+
     def test_poll_sources_isolates_failures(self) -> None:
         class BadSource(SourcePlugin):
             async def poll(self, ctx: PluginContext):
