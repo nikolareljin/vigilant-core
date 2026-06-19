@@ -322,6 +322,13 @@ class LoaderHardeningTests(unittest.TestCase):
         # A name without a type is a misconfiguration, not a type.
         self.assertIsNone(build_plugin({"name": "siren"}))
 
+    def test_enabled_string_false_disables(self) -> None:
+        # A user-edited "enabled": "false" must disable the plugin (bool("false")
+        # would otherwise be True).
+        self.assertIsNone(
+            build_plugin({"type": "notify_device", "name": "n", "enabled": "false"})
+        )
+
     def test_nonobject_options_coerced(self) -> None:
         plugin = build_plugin(
             {"type": "notify_device", "name": "n", "options": "not-a-dict"}

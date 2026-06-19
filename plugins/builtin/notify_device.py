@@ -56,12 +56,20 @@ class NotifyDevicePlugin(DevicePlugin):
                 "low": "low",
             }.get(str(event.severity).lower(), "normal")
             try:
-                subprocess.run(
+                result = subprocess.run(
                     [self._notify_send, "-u", urgency, title, body],
                     check=False,
                     timeout=5,
                 )
-                return
+                if result.returncode == 0:
+                    return
+                # Nonzero exit (e.g. headless service with no DBus session):
+                # notify-send doesn't raise, so fall through to the log instead.
+                logger.debug(
+                    "notify-send exited %s for %s; logging instead",
+                    result.returncode,
+                    self.name,
+                )
             except Exception:  # pragma: no cover - environment dependent
                 logger.debug("notify-send failed for %s; logging instead", self.name)
         logger.warning("NOTIFY %s :: %s :: %s", self.name, title, body)

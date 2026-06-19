@@ -16,7 +16,7 @@ import importlib
 import logging
 from typing import Any, List, Optional, Type
 
-from .base import Plugin
+from .base import Plugin, coerce_bool
 from .builtin.mqtt_transport import MqttTransportPlugin
 from .builtin.notify_device import NotifyDevicePlugin
 from .builtin.rss_source import RssSourcePlugin
@@ -58,7 +58,7 @@ def build_plugin(entry: dict[str, Any]) -> Optional[Plugin]:
 
     if not isinstance(entry, dict):
         return None
-    if not entry.get("enabled", True):
+    if not coerce_bool(entry.get("enabled", True), True):
         return None
     type_name = entry.get("type")
     if not type_name:

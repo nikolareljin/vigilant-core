@@ -70,10 +70,13 @@ class MqttTransportPlugin(TransportPlugin):
         except Exception:  # pragma: no cover - older paho without the setter
             pass
         try:
-            client.connect(host, port, keepalive=int(self.options.get("keepalive", 60)))
+            # connect_async + loop_start so an initial broker outage doesn't
+            # leave the transport permanently dead: paho keeps retrying in the
+            # background and connects once the broker is reachable.
+            client.connect_async(host, port, keepalive=int(self.options.get("keepalive", 60)))
             client.loop_start()
         except Exception as exc:
-            logger.warning("MQTT transport %s failed to connect: %s", self.name, exc)
+            logger.warning("MQTT transport %s failed to start: %s", self.name, exc)
             self.health.record_error(f"connect failed: {exc}")
             return None
         return client
