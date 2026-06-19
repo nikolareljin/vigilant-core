@@ -58,6 +58,15 @@ class MqttTransportPlugin(TransportPlugin):
         username = self.options.get("username")
         if username:
             client.username_pw_set(username, self.options.get("password"))
+        # Bounded exponential backoff so a broker outage doesn't cause a tight
+        # reconnect loop.
+        try:
+            client.reconnect_delay_set(
+                min_delay=int(self.options.get("reconnect_min_delay", 1)),
+                max_delay=int(self.options.get("reconnect_max_delay", 120)),
+            )
+        except Exception:  # pragma: no cover - older paho without the setter
+            pass
         try:
             client.connect(host, port, keepalive=int(self.options.get("keepalive", 60)))
             client.loop_start()
@@ -78,9 +87,17 @@ class MqttTransportPlugin(TransportPlugin):
             except Exception:
                 logger.exception("MQTT transport %s: bad inbound payload", self.name)
 
+        # Re-subscribe on every (re)connect: paho drops subscriptions across a
+        # broker/network drop, so a one-time subscribe would silently stop
+        # delivering inbound messages after a reconnect. *args absorbs the paho
+        # v1/v2 on_connect signature differences.
+        def _on_connect(client, _userdata, _flags, _rc, *args) -> None:
+            client.subscribe(topic)
+
         try:
             self._client.on_message = _on_message
-            self._client.subscribe(topic)
+            self._client.on_connect = _on_connect
+            self._client.subscribe(topic)  # initial subscribe; on_connect covers reconnects
         except Exception as exc:  # pragma: no cover - broker dependent
             logger.warning("MQTT transport %s inbound subscribe failed: %s", self.name, exc)
 

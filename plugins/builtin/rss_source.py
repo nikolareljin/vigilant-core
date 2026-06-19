@@ -93,7 +93,11 @@ class RssSourcePlugin(SourcePlugin):
                             )
                         )
         except Exception as exc:  # pragma: no cover - network defensive
-            self.health.record_error(str(exc), latency_ms=(perf_counter() - started) * 1000)
+            self.health.record_error(
+                str(exc),
+                latency_ms=(perf_counter() - started) * 1000,
+                item_count=len(events),
+            )
             return events
         latency_ms = (perf_counter() - started) * 1000
         # If every feed failed and nothing came through, that's an error, not a
