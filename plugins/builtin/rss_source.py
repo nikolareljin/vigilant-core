@@ -41,6 +41,7 @@ class RssSourcePlugin(SourcePlugin):
         longitude = getattr(config, "longitude", None) if config else None
 
         timeout = httpx.Timeout(self.options.get("timeout", 20))
+        feed_errors = 0
         try:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 for feed_url in feeds:
@@ -49,6 +50,7 @@ class RssSourcePlugin(SourcePlugin):
                         resp.raise_for_status()
                         parsed = await asyncio.to_thread(feedparser.parse, resp.text)
                     except Exception as exc:
+                        feed_errors += 1
                         logger.debug("RSS plugin %s: feed %s failed: %s", self.name, feed_url, exc)
                         continue
                     feed_title = parsed.feed.get("title", "RSS")
@@ -84,7 +86,14 @@ class RssSourcePlugin(SourcePlugin):
         except Exception as exc:  # pragma: no cover - network defensive
             self.health.record_error(str(exc), latency_ms=(perf_counter() - started) * 1000)
             return events
-        self.health.record_success(
-            latency_ms=(perf_counter() - started) * 1000, item_count=len(events)
-        )
+        latency_ms = (perf_counter() - started) * 1000
+        # If every feed failed and nothing came through, that's an error, not a
+        # success — don't let the unconditional success path mask the outage.
+        if feed_errors and not events:
+            self.health.record_error(
+                f"{feed_errors} of {len(feeds)} RSS feed(s) failed",
+                latency_ms=latency_ms,
+            )
+        else:
+            self.health.record_success(latency_ms=latency_ms, item_count=len(events))
         return events

@@ -96,7 +96,16 @@ def build_registry(
     registry = PluginRegistry(config=config, node_id=node_id)
     entries: List[dict[str, Any]] = []
     if config is not None:
-        entries = list(getattr(config, "plugins", None) or [])
+        raw = getattr(config, "plugins", None)
+        if raw is None:
+            raw = []
+        elif not isinstance(raw, list):
+            logger.warning(
+                "config.plugins must be a list, got %s; ignoring",
+                type(raw).__name__,
+            )
+            raw = []
+        entries = raw
     for entry in entries:
         plugin = build_plugin(entry)
         if plugin is not None:

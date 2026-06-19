@@ -230,6 +230,20 @@ class ConfigPersistenceTests(unittest.TestCase):
                 loaded = load_config()
                 self.assertEqual(loaded.plugins, cfg.plugins)
 
+    def test_nonlist_plugins_in_config_coerced_to_empty(self) -> None:
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from utils.config import load_config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("utils.config.config_dir", return_value=Path(tmp)):
+                (Path(tmp) / "config.json").write_text(
+                    json.dumps({"subject": "x", "plugins": {"a": 1}}), encoding="utf-8"
+                )
+                self.assertEqual(load_config().plugins, [])
+
 
 class LoaderTests(unittest.TestCase):
     def test_resolve_builtin_and_module_path(self) -> None:

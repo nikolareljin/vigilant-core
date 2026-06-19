@@ -203,7 +203,7 @@ def load_config() -> AppConfig:
         context_enable_historical=_coerce_bool(
             data.get("context_enable_historical", True), True
         ),
-        plugins=list(data.get("plugins", []) or []),
+        plugins=list(data["plugins"]) if isinstance(data.get("plugins"), list) else [],
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
     cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
