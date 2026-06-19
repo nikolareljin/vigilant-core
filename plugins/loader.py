@@ -60,7 +60,7 @@ def build_plugin(entry: dict[str, Any]) -> Optional[Plugin]:
         return None
     if not entry.get("enabled", True):
         return None
-    type_name = entry.get("type") or entry.get("name")
+    type_name = entry.get("type")
     if not type_name:
         logger.warning("Plugin entry missing 'type': %r", entry)
         return None
@@ -68,7 +68,16 @@ def build_plugin(entry: dict[str, Any]) -> Optional[Plugin]:
     if cls is None:
         return None
     name = str(entry.get("name") or type_name)
-    options = entry.get("options") or {}
+    options = entry.get("options")
+    if options is None:
+        options = {}
+    elif not isinstance(options, dict):
+        logger.warning(
+            "Plugin %s 'options' must be an object, got %s; ignoring",
+            name,
+            type(options).__name__,
+        )
+        options = {}
     try:
         return cls(name=name, options=options)
     except Exception as exc:

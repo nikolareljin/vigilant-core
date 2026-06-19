@@ -94,7 +94,10 @@ Plugins are declared in config (`AppConfig.plugins`) and loaded by `build_regist
 out-of-tree plugins. The registry starts each plugin, wires egress plugins to bus
 topics, polls sources each cycle, and fans stored events out to egress.
 
-### Mesh node identity + store-and-forward — `mesh/`
+### Mesh node identity + store-and-forward — `mesh/` (a later release)
+
+The `mesh/` package below lands in a subsequent release; the kernel and contract
+in this release are what it builds on.
 
 - `mesh/node.py` — a persistent `node_id` (ULID), label, and role
   (`hub`/`edge`/`relay`) under the platform data dir, so events can record their
@@ -124,8 +127,9 @@ self-contained and driven directly (`build_registry(config)` +
 
 ## Roadmap
 
-Phase 1 (this) ships contracts, the kernel, node/forwarding model, and three
-reference plugins (RSS source, MQTT transport, notify device). Later phases —
+Phase 1 ships, across its releases, the contract, this plugin kernel with three
+reference plugins (RSS source, MQTT transport, notify device), and the mesh
+node/forwarding model (a later release). Subsequent phases —
 multi-channel routing, LoRa/BLE/satellite transports + Rust/Go edge daemons,
 encrypted offline storage, LLM gateway, AI fusion, prompt-injection hardening,
 event signing — each land as plugins or additive modules against this contract.

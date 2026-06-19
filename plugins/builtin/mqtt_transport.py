@@ -17,14 +17,13 @@ from typing import Any, Optional
 
 from contracts import EmergencyEvent
 
-from ..base import PluginContext, TransportPlugin, TOPIC_INGEST
+from ..base import PluginContext, TransportPlugin, TOPIC_INGEST, is_high_priority
 
 logger = logging.getLogger(__name__)
 
 NORMALIZED_SUFFIX = "normalized"
 HIGH_PRIORITY_SUFFIX = "high_priority"
 INGEST_SUFFIX = "ingest"
-_HIGH_SEVERITIES = {"high", "critical"}
 
 
 class MqttTransportPlugin(TransportPlugin):
@@ -93,16 +92,20 @@ class MqttTransportPlugin(TransportPlugin):
                 getattr(client, closer)()
             except Exception:
                 pass
+        # Clear the client so a later start() reconnects instead of staying inert.
+        self._client = None
 
     # ----- outbound ------------------------------------------------------
     def send(self, event: EmergencyEvent) -> None:
         if self._client is None:
-            return
+            # Configured but not connected (broker down / paho missing): surface
+            # a failure so the registry guard records it instead of faking success.
+            raise RuntimeError(f"MQTT transport {self.name} is not connected")
         if self._validate:
             event.validate()  # raises on contract violation before we publish
         payload = event.to_json()
         self._publish(f"{self._base_topic}/{NORMALIZED_SUFFIX}", payload)
-        if str(event.severity).lower() in _HIGH_SEVERITIES:
+        if is_high_priority(event):
             self._publish(f"{self._base_topic}/{HIGH_PRIORITY_SUFFIX}", payload)
 
     def _publish(self, topic: str, payload: str) -> None:
@@ -117,6 +120,6 @@ class MqttTransportPlugin(TransportPlugin):
         """Topics ``send`` would target for ``event`` (handy for tests/docs)."""
 
         topics = [f"{self._base_topic}/{NORMALIZED_SUFFIX}"]
-        if str(event.severity).lower() in _HIGH_SEVERITIES:
+        if is_high_priority(event):
             topics.append(f"{self._base_topic}/{HIGH_PRIORITY_SUFFIX}")
         return topics

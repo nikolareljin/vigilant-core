@@ -34,6 +34,22 @@ KIND_TRANSPORT = "transport"
 KIND_DEVICE = "device"
 KIND_SINK = "sink"
 
+# High-priority routing criteria (issue #58): severity high/critical OR a high
+# impact score, since EmergencyEvent does not force the two to agree.
+HIGH_PRIORITY_IMPACT = 7
+_HIGH_SEVERITIES = ("high", "critical")
+
+
+def is_high_priority(event: EmergencyEvent) -> bool:
+    """Whether an event should be routed to high-priority sinks/topics."""
+
+    if str(getattr(event, "severity", "")).lower() in _HIGH_SEVERITIES:
+        return True
+    try:
+        return int(getattr(event, "impact_score", 0) or 0) >= HIGH_PRIORITY_IMPACT
+    except (TypeError, ValueError):
+        return False
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")

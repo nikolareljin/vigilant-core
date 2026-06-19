@@ -27,11 +27,10 @@ from .base import (
     TOPIC_HIGH,
     TOPIC_INGEST,
     TOPIC_NEW,
+    is_high_priority,
 )
 
 logger = logging.getLogger(__name__)
-
-_HIGH_SEVERITIES = {"high", "critical"}
 
 
 class PluginRegistry:
@@ -135,10 +134,12 @@ class PluginRegistry:
         events: List[EmergencyEvent] = []
         for plugin, result in zip(source_plugins, results):
             if isinstance(result, Exception):
+                # Only record here for an *uncaught* error; a plugin's own poll()
+                # (e.g. RssSourcePlugin) records its success/error itself, so we do
+                # not double-count the success path.
                 logger.warning("Source plugin %s poll failed: %s", plugin.name, result)
                 plugin.health.record_error(str(result))
                 continue
-            plugin.health.record_success(item_count=len(result))
             events.extend(result)
         return events
 
@@ -148,7 +149,7 @@ class PluginRegistry:
         if not self._plugins:
             return
         self.bus.publish(TOPIC_NEW, event)
-        if str(event.severity).lower() in _HIGH_SEVERITIES:
+        if is_high_priority(event):
             self.bus.publish(TOPIC_HIGH, event)
 
     def subscribe_ingest(self, handler: Callable[[EmergencyEvent], None]) -> None:

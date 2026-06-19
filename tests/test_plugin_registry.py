@@ -115,6 +115,23 @@ class RegistryRoutingTests(unittest.TestCase):
         log = registry.plugins[0]
         self.assertEqual(len(log.rendered), 1)
 
+    def test_high_impact_score_routes_high_even_if_severity_low(self) -> None:
+        # issue #58: high_priority is impact_score >= 7 OR severity high/critical.
+        fake = FakeMqttClient()
+        cfg = _Cfg([
+            {"type": "mqtt_transport", "name": "bus",
+             "options": {"client": fake, "base_topic": "intel/events"}},
+            {"type": "notify_device", "name": "siren",
+             "options": {"desktop": False}},
+        ])
+        registry = build_registry(cfg, node_id="NODE-A")
+        ev = EmergencyEvent(title="Quiet-looking but severe", hazard_type="outage",
+                            severity="medium", confidence=0.6, impact_score=8)
+        registry.publish(ev)
+        self.assertIn("intel/events/high_priority", [t for t, _ in fake.published])
+        siren = next(p for p in registry.plugins if p.name == "siren")
+        self.assertEqual(len(siren.rendered), 1)
+
     def test_disabled_plugin_not_loaded(self) -> None:
         cfg = _Cfg([
             {"type": "notify_device", "name": "off", "enabled": False, "options": {}},
@@ -235,6 +252,38 @@ class MqttTransportTests(unittest.TestCase):
             plugin.published_topics_for(_event("critical")),
             ["intel/events/normalized", "intel/events/high_priority"],
         )
+        # High impact with non-severe severity still targets high_priority (#58).
+        high_impact = EmergencyEvent(title="x", severity="medium", confidence=0.5,
+                                     impact_score=9)
+        self.assertIn("intel/events/high_priority",
+                      plugin.published_topics_for(high_impact))
+
+    def test_send_raises_when_disconnected(self) -> None:
+        # No client injected and no broker: send must fail, not fake success.
+        plugin = MqttTransportPlugin("bus", {"base_topic": "intel/events"})
+        plugin.start(PluginContext(bus=EventBus(), config=None, node_id="N"))
+        with self.assertRaises(RuntimeError):
+            plugin.send(_event("critical"))
+
+    def test_stop_resets_client_for_reconnect(self) -> None:
+        fake = FakeMqttClient()
+        plugin = MqttTransportPlugin("bus", {"client": fake})
+        plugin.start(PluginContext(bus=EventBus(), config=None, node_id="N"))
+        plugin.stop()
+        self.assertIsNone(plugin._client)
+
+
+class LoaderHardeningTests(unittest.TestCase):
+    def test_missing_type_returns_none(self) -> None:
+        # A name without a type is a misconfiguration, not a type.
+        self.assertIsNone(build_plugin({"name": "siren"}))
+
+    def test_nonobject_options_coerced(self) -> None:
+        plugin = build_plugin(
+            {"type": "notify_device", "name": "n", "options": "not-a-dict"}
+        )
+        self.assertIsInstance(plugin, NotifyDevicePlugin)
+        self.assertEqual(plugin.options, {})
 
 
 if __name__ == "__main__":
