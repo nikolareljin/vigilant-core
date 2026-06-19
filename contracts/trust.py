@@ -78,7 +78,11 @@ def cap_unverified(tier: str | None) -> str:
     trust for events that actually prove it.
     """
 
-    normalized = (tier or "").strip().lower()
+    if not isinstance(tier, str):
+        # Non-string (e.g. JSON number/array): leave it unchanged so the caller's
+        # validate() rejects it with ValueError rather than crashing here.
+        return tier
+    normalized = tier.strip().lower()
     if rank(normalized) > rank(UNVERIFIED_CEILING):
         return UNVERIFIED_CEILING
     return normalized if normalized in TRUST_TIERS else DEFAULT_TRUST

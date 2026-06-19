@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
 from . import trust as trust_tiers
@@ -65,21 +65,27 @@ REQUIRED_ON_DECODE: tuple[str, ...] = (
 # never sneak in via a range boundary. Case-insensitive for interop.
 _ULID_RE = re.compile(r"^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$", re.IGNORECASE)
 
+# Canonical ISO-8601 UTC, identical to the JSON Schema pattern: a 'T' separator
+# (not a space) and an explicit UTC zone. Keeping the structural check and the
+# schema in lockstep means the no-jsonschema path accepts exactly what the schema
+# accepts — no looser, no stricter.
+_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$")
+
 
 def _looks_like_ulid(value: Any) -> bool:
     return isinstance(value, str) and bool(_ULID_RE.match(value))
 
 
 def _looks_like_iso_utc(value: Any) -> bool:
-    """True if ``value`` is an ISO-8601 timestamp in UTC (``Z`` or ``+00:00``)."""
+    """True if ``value`` is a canonical ISO-8601 UTC timestamp (matching the schema)."""
 
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not _ISO_UTC_RE.match(value):
         return False
     try:
-        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return False
-    return parsed.utcoffset() == timedelta(0)
+    return True
 
 # Keyword → hazard_type. First match wins; order matters (specific before generic).
 _HAZARD_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -190,6 +196,10 @@ class EmergencyEvent:
                 raise ValueError(
                     f"payload missing required field(s): {', '.join(missing)}"
                 )
+            # A required title must be a real non-empty string — reject falsy
+            # non-strings (0, False, []) before the lenient placeholder masks them.
+            if not isinstance(data.get("title"), str) or not data["title"].strip():
+                raise ValueError("title must be a non-empty string")
         known = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
         filtered = {k: v for k, v in data.items() if k in known}
         # Default a missing OR present-but-empty/null title (lenient mode only;
@@ -335,8 +345,17 @@ class EmergencyEvent:
             if geo:
                 location["geohash"] = geo
 
+        # Treat a string/bytes/mapping merged_sources as a single scalar source,
+        # not an iterable of characters/keys.
+        if isinstance(merged_sources, (str, bytes, Mapping)):
+            merged_iter: tuple[Any, ...] = (merged_sources,)
+        else:
+            try:
+                merged_iter = tuple(merged_sources or ())
+            except TypeError:
+                merged_iter = (merged_sources,)
         sources: list[str] = []
-        for candidate in (source, *(merged_sources or ())):
+        for candidate in (source, *merged_iter):
             value = str(candidate or "").strip()
             if value and value not in sources:
                 sources.append(value)

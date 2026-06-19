@@ -233,6 +233,36 @@ class EmergencyEventContractTests(unittest.TestCase):
         self.assertEqual(trust.cap_unverified(" untrusted "), "untrusted")
         self.assertEqual(trust.cap_unverified("OPEN_SEARCH"), "open_search")
 
+    def test_iso_utc_structural_check_matches_schema(self) -> None:
+        # A space separator parses via fromisoformat but is not canonical; the
+        # structural check must reject it just like the schema does.
+        bad = EmergencyEvent(title="t", severity="low", confidence=0.5,
+                             impact_score=5, timestamp_utc="2026-06-19 18:00:00Z")
+        with self.assertRaises(ValueError):
+            bad.validate()
+
+    def test_from_normalized_treats_string_merged_sources_as_scalar(self) -> None:
+        event = EmergencyEvent.from_normalized(
+            normalized=self._normalized(), title="x", source="NWS",
+            merged_sources="County OEM",
+        )
+        self.assertIn("County OEM", event.sources)
+        self.assertNotIn("C", event.sources)  # not iterated char-by-char
+
+    def test_strict_decode_rejects_falsy_nonstring_title(self) -> None:
+        full = EmergencyEvent(title="t", severity="high", confidence=0.5, impact_score=6)
+        payload = json.loads(full.to_json())
+        for bad_title in (0, False, []):
+            with self.assertRaises(ValueError):
+                EmergencyEvent.from_json(json.dumps(dict(payload, title=bad_title)))
+
+    def test_strict_decode_rejects_nonstring_trust_with_value_error(self) -> None:
+        full = EmergencyEvent(title="t", severity="high", confidence=0.5, impact_score=6)
+        payload = json.loads(full.to_json())
+        for bad_trust in (123, ["signed_node"]):
+            with self.assertRaises(ValueError):
+                EmergencyEvent.from_json(json.dumps(dict(payload, trust=bad_trust)))
+
     def test_from_normalized_tolerates_bad_impact_score(self) -> None:
         event = EmergencyEvent.from_normalized(
             normalized=self._normalized(), title="x", impact_score="not-a-number"
