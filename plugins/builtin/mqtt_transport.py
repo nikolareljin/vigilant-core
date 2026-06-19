@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 from contracts import EmergencyEvent
 
-from ..base import PluginContext, TransportPlugin, TOPIC_INGEST, is_high_priority
+from ..base import PluginContext, TransportPlugin, TOPIC_INGEST, coerce_bool, is_high_priority
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +33,16 @@ class MqttTransportPlugin(TransportPlugin):
         self._client = self.options.get("client")  # injectable for tests
         self._ctx: Optional[PluginContext] = None
         self._base_topic = str(self.options.get("base_topic", "intel/events")).rstrip("/")
-        self._validate = bool(self.options.get("validate", True))
+        self._validate = coerce_bool(self.options.get("validate", True), True)
 
     # ----- lifecycle -----------------------------------------------------
     def start(self, ctx: PluginContext) -> None:
         self._ctx = ctx
         if self._client is None:
             self._client = self._connect()
-        if self._client is not None and self.options.get("subscribe_inbound"):
+        if self._client is not None and coerce_bool(
+            self.options.get("subscribe_inbound", False), False
+        ):
             self._subscribe_inbound()
 
     def _connect(self):

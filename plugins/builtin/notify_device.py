@@ -17,7 +17,7 @@ from typing import List
 
 from contracts import EmergencyEvent
 
-from ..base import DevicePlugin, PluginContext
+from ..base import DevicePlugin, PluginContext, coerce_bool
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class NotifyDevicePlugin(DevicePlugin):
     def __init__(self, name: str, options=None) -> None:
         super().__init__(name, options)
         self.rendered: List[dict] = []
-        self._use_desktop = bool(self.options.get("desktop", True))
+        self._use_desktop = coerce_bool(self.options.get("desktop", True), True)
         self._notify_send = shutil.which("notify-send") if self._use_desktop else None
 
     def start(self, ctx: PluginContext) -> None:

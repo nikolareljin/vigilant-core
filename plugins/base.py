@@ -40,6 +40,25 @@ HIGH_PRIORITY_IMPACT = 7
 _HIGH_SEVERITIES = ("high", "critical")
 
 
+def coerce_bool(value: Any, default: bool = False) -> bool:
+    """Parse a plugin-option bool, recognizing JSON string forms.
+
+    ``bool("false")`` is ``True``, a footgun for user-edited config.json, so
+    accept the usual string spellings explicitly (mirrors utils.config)."""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("1", "true", "yes", "on"):
+            return True
+        if lowered in ("0", "false", "no", "off"):
+            return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
+
+
 def is_high_priority(event: EmergencyEvent) -> bool:
     """Whether an event should be routed to high-priority sinks/topics."""
 
