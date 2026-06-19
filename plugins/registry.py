@@ -47,6 +47,15 @@ class PluginRegistry:
     # ----- registration / lifecycle -------------------------------------
     def register(self, plugin: Plugin) -> None:
         self._plugins.append(plugin)
+        # If the registry is already running, start and wire the late arrival now
+        # so egress plugins actually receive events.
+        if self._started:
+            try:
+                plugin.start(self._context_for(plugin))
+                self._wire_egress(plugin)
+            except Exception as exc:
+                logger.exception("Failed to start plugin %s", plugin.name)
+                plugin.health.record_error(f"start failed: {exc}")
 
     @property
     def plugins(self) -> List[Plugin]:
