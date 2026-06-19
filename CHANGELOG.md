@@ -2,6 +2,18 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.10.0] - 2026-06-19
+
+### Added
+
+- **Canonical `EmergencyEvent` contract** (`contracts/`): the versioned (v2.0), cross-node event shape shared across the platform — the ingest pipeline, dashboard, MQTT bus, and future edge daemons. It is a strict superset of the v1.0 normalized alert, so existing alerts upgrade losslessly via `EmergencyEvent.from_normalized()`.
+  - New platform fields: stable `event_id` (ULID), `origin_node_id`, `hazard_type`, `trust` tier, mesh `ttl_hops`/`seen_nodes`, and recommended `actions`.
+  - **JSON Schema** (`contracts/emergency_event.schema.json`) with a validator that uses `jsonschema` when available and always applies cheap structural checks (so dependency-free edge nodes can validate too).
+  - Dependency-free **ULID** generation (time-sortable ids) and a **geohash** encoder for geo-routing/dedup.
+  - **Trust tiers** (`contracts/trust.py`) mapping source kinds to a provenance ordering, the boundary the AI/RAG pipeline and routing engine consult.
+- **Tests** (`tests/test_contract.py`) covering round-trip, schema validation, lossless upgrade from the normalized payload, hazard inference, mesh helpers, and trust ordering.
+- Adds `jsonschema` to requirements; documents the schema in `docs/emergency-event-schema.md`.
+
 ## [0.9.0] - 2026-06-18
 
 ### Added

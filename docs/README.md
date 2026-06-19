@@ -11,6 +11,7 @@ Welcome to the VigilantCore documentation.
 | [Features](features.md) | Complete feature documentation |
 | [Source Discovery & Regional Coverage](source-discovery.md) | How outage/emergency/cross-region source selection works |
 | [Examples](examples.md) | Real-world usage examples |
+| [EmergencyEvent Schema](emergency-event-schema.md) | The canonical cross-node event contract (v2.0) |
 
 ## Quick Links
 
