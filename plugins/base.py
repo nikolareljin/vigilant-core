@@ -23,9 +23,9 @@ from contracts import EmergencyEvent
 logger = logging.getLogger(__name__)
 
 # Bus topics. Egress plugins subscribe to what they care about; the engine
-# publishes every stored alert to NEW and additionally to HIGH when severe.
+# publishes every stored alert to NEW and additionally to HIGH when high-priority.
 TOPIC_NEW = "event.new"          # every newly stored alert
-TOPIC_HIGH = "event.high"        # severity high/critical only
+TOPIC_HIGH = "event.high"        # high-priority: severity high/critical OR impact_score >= 7
 TOPIC_INGEST = "event.ingest"    # inbound events from transports/sources -> pipeline
 
 # Plugin kinds.
@@ -80,15 +80,21 @@ class PluginHealth:
         self.success_count += 1
         self.last_latency_ms = round(max(0.0, float(latency_ms)), 2)
         self.last_item_count = max(0, int(item_count))
+        # Clear both the message and its timestamp on success (matches v0.8.0).
         self.last_error = None
+        self.last_error_utc = None
 
-    def record_error(self, message: str, *, latency_ms: float = 0.0) -> None:
+    def record_error(
+        self, message: str, *, latency_ms: float = 0.0, item_count: int = 0
+    ) -> None:
         now = _now_iso()
         self.last_attempt_utc = now
         self.last_error_utc = now
         self.attempt_count += 1
         self.error_count += 1
         self.last_latency_ms = round(max(0.0, float(latency_ms)), 2)
+        # Update item_count on every attempt, including failures (matches v0.8.0).
+        self.last_item_count = max(0, int(item_count))
         self.last_error = (message or "error")[:240].strip() or "error"
 
     def as_dict(self) -> Dict[str, Any]:
@@ -98,6 +104,8 @@ class PluginHealth:
             "enabled": self.enabled,
             "last_attempt_utc": self.last_attempt_utc,
             "last_success_utc": self.last_success_utc,
+            # Alias matching the v0.8.0 source-health dashboard key.
+            "last_successful_fetch_utc": self.last_success_utc,
             "last_error_utc": self.last_error_utc,
             "last_error": self.last_error,
             "attempt_count": self.attempt_count,

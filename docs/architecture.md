@@ -67,7 +67,8 @@ Plugins communicate through an in-process **`EventBus`** (publish/subscribe),
 which replaces the engine's single `on_new_alert` callback. Topics:
 
 - `event.new` — every newly stored alert (transports + sinks subscribe).
-- `event.high` — high/critical only (devices like sirens default to this).
+- `event.high` — high-priority only: severity high/critical OR `impact_score >= 7`
+  (devices like sirens default to this).
 - `event.ingest` — inbound events from transports re-entering the pipeline.
 
 Every plugin reports health in the same shape as the v0.8.0 source-health

@@ -41,6 +41,21 @@ def _event(severity: str = "high") -> EmergencyEvent:
     )
 
 
+class PluginHealthTests(unittest.TestCase):
+    def test_success_clears_error_and_error_updates_item_count(self) -> None:
+        from plugins.base import PluginHealth
+        h = PluginHealth(name="x", kind="source")
+        h.record_success(item_count=5)
+        h.record_error("boom")  # item_count must update on failure too
+        self.assertEqual(h.last_item_count, 0)
+        self.assertIsNotNone(h.last_error_utc)
+        h.record_success(item_count=3)  # success clears error + its timestamp
+        self.assertIsNone(h.last_error)
+        self.assertIsNone(h.last_error_utc)
+        snap = h.as_dict()
+        self.assertEqual(snap["last_successful_fetch_utc"], snap["last_success_utc"])
+
+
 class EventBusTests(unittest.TestCase):
     def test_publish_delivers_to_subscribers(self) -> None:
         bus = EventBus()

@@ -86,8 +86,9 @@ class PluginRegistry:
             # Transports get every event; they decide normal vs high internally.
             self._subscribe_egress(TOPIC_NEW, self._guard(plugin, plugin.send))
         elif isinstance(plugin, DevicePlugin):
-            # Devices (sirens/displays) default to high-severity only; override
-            # with options {"min_severity": "low"} to receive everything.
+            # Devices (sirens/displays) default to high-priority only (severity
+            # high/critical OR impact_score >= 7); override with options
+            # {"min_severity": "low"} to receive everything.
             topic = TOPIC_NEW if plugin.options.get("min_severity") == "low" else TOPIC_HIGH
             self._subscribe_egress(topic, self._guard(plugin, plugin.render))
         elif isinstance(plugin, SinkPlugin):
@@ -144,7 +145,8 @@ class PluginRegistry:
         return events
 
     def publish(self, event: EmergencyEvent) -> None:
-        """Fan a stored event out to egress plugins (NEW, plus HIGH when severe)."""
+        """Fan a stored event out to egress plugins (NEW, plus HIGH when the event
+        is high-priority: severity high/critical OR impact_score >= 7)."""
 
         if not self._plugins:
             return

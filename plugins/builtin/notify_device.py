@@ -1,7 +1,8 @@
 """Notification device plugin — the reference DevicePlugin.
 
-By default it renders high/critical events as a local notification: it shells
-out to ``notify-send`` when available, otherwise logs a formatted line. Rendered
+By default it renders high-priority events (severity high/critical OR
+``impact_score >= 7``) as a local notification: it shells out to ``notify-send``
+when available, otherwise logs a formatted line. Rendered
 events are also retained in ``self.rendered`` so tests and the dashboard can
 inspect what was surfaced without a display. Real output devices (sirens, GPIO
 relays, TTS — issue #29) follow this same ``render`` shape.
