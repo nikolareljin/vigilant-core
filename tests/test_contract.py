@@ -99,6 +99,16 @@ class EmergencyEventContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bad.validate()
 
+    def test_validate_rejects_numeric_strings_without_jsonschema(self) -> None:
+        # A payload with ttl_hops="1" must be rejected by validate(), otherwise
+        # can_forward() ("1" > 0) raises TypeError on dependency-free nodes.
+        event = EmergencyEvent.from_dict(
+            {"title": "t", "severity": "low", "confidence": 0.5,
+             "impact_score": 5, "ttl_hops": "1"}
+        )
+        with self.assertRaises(ValueError):
+            event.validate()
+
     def test_from_dict_ignores_unknown_fields(self) -> None:
         event = EmergencyEvent.from_dict(
             {"title": "t", "hazard_type": "fire", "totally_unknown": 1}

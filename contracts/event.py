@@ -74,22 +74,24 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _as_float(value: Any, field_name: str) -> float:
-    """Coerce to float, raising ``ValueError`` (not ``TypeError``) on bad input."""
+def _require_number(value: Any, field_name: str) -> float:
+    """Return ``value`` as float, raising ``ValueError`` unless it is a real
+    number. Rejects strings/None/bool so the no-``jsonschema`` path does not
+    accept e.g. ``confidence="0.5"`` and leave a non-numeric on the object."""
 
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        raise ValueError(f"{field_name} must be a number") from None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be a number, got {type(value).__name__}")
+    return float(value)
 
 
-def _as_int(value: Any, field_name: str) -> int:
-    """Coerce to int, raising ``ValueError`` (not ``TypeError``) on bad input."""
+def _require_int(value: Any, field_name: str) -> int:
+    """Return ``value`` if it is a real int, raising ``ValueError`` otherwise.
+    Rejects numeric strings/None/bool so downstream integer ops (e.g.
+    ``ttl_hops > 0`` in ``can_forward()``) cannot raise ``TypeError``."""
 
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        raise ValueError(f"{field_name} must be an integer") from None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field_name} must be an integer, got {type(value).__name__}")
+    return value
 
 
 def infer_hazard_type(*texts: str | None) -> str:
@@ -222,11 +224,11 @@ class EmergencyEvent:
             raise ValueError(f"invalid hazard_type: {self.hazard_type!r}")
         if self.severity not in SEVERITIES:
             raise ValueError(f"invalid severity: {self.severity!r}")
-        if not 0.0 <= _as_float(self.confidence, "confidence") <= 1.0:
+        if not 0.0 <= _require_number(self.confidence, "confidence") <= 1.0:
             raise ValueError("confidence must be within [0, 1]")
-        if not 1 <= _as_int(self.impact_score, "impact_score") <= 10:
+        if not 1 <= _require_int(self.impact_score, "impact_score") <= 10:
             raise ValueError("impact_score must be within [1, 10]")
-        if _as_int(self.ttl_hops, "ttl_hops") < 0:
+        if _require_int(self.ttl_hops, "ttl_hops") < 0:
             raise ValueError("ttl_hops must be non-negative")
         if self.trust not in trust_tiers.TRUST_TIERS:
             raise ValueError(f"invalid trust tier: {self.trust!r}")
