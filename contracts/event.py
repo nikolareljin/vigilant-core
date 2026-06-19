@@ -69,7 +69,7 @@ _ULID_RE = re.compile(r"^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$", re.IGNORECASE)
 # (not a space) and an explicit UTC zone. Keeping the structural check and the
 # schema in lockstep means the no-jsonschema path accepts exactly what the schema
 # accepts — no looser, no stricter.
-_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$")
+_ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|\+00:00)$")
 
 
 def _looks_like_ulid(value: Any) -> bool:
