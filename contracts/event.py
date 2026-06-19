@@ -171,11 +171,13 @@ class EmergencyEvent:
         """Build an event from a mapping.
 
         With ``strict=True`` (the default for :meth:`from_json`, i.e. decoding a
-        payload received from another node), required fields must be present and
-        non-empty — we refuse to *mint* a missing ``event_id`` or ``timestamp_utc``
-        on decode, since inventing identities would corrupt cross-node dedup and
-        loop detection. Lenient mode (the default here) is for locally-constructed
-        events, where defaults like a fresh ULID are intended.
+        payload received from another node), the payload must carry every required
+        field and pass full :meth:`validate` — we refuse to *mint* a missing
+        ``event_id``/``timestamp_utc``/mesh-state on decode, and we reject
+        malformed values (e.g. ``ttl_hops="1"`` or a non-ULID id) up front so the
+        ``ValueError`` guarantee holds before any downstream mesh op runs. Lenient
+        mode (the default here) is for locally-constructed events, where defaults
+        like a fresh ULID are intended.
         """
 
         if not isinstance(data, Mapping):
@@ -190,7 +192,10 @@ class EmergencyEvent:
         filtered = {k: v for k, v in data.items() if k in known}
         if "title" not in filtered:
             filtered["title"] = data.get("title") or "(no title)"
-        return cls(**filtered)
+        event = cls(**filtered)
+        if strict:
+            event.validate()
+        return event
 
     @classmethod
     def from_json(cls, raw: str | bytes, *, strict: bool = True) -> "EmergencyEvent":

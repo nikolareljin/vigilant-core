@@ -144,6 +144,22 @@ class EmergencyEventContractTests(unittest.TestCase):
         # The complete payload still decodes.
         EmergencyEvent.from_dict(payload, strict=True)
 
+    def test_strict_decode_rejects_present_but_malformed_values(self) -> None:
+        # All required keys present, but malformed values must be rejected on
+        # decode (not just on a later validate()), so transports never hand back
+        # an event that would TypeError in can_forward().
+        full = EmergencyEvent(title="t", severity="high", confidence=0.5, impact_score=6)
+        payload = json.loads(full.to_json())
+        for field_name, bad in (
+            ("ttl_hops", "1"),
+            ("event_id", "not-a-ulid"),
+            ("timestamp_utc", "whenever"),
+            ("seen_nodes", "nodeA"),
+        ):
+            broken = dict(payload, **{field_name: bad})
+            with self.assertRaises(ValueError):
+                EmergencyEvent.from_json(json.dumps(broken))
+
     def test_from_dict_ignores_unknown_fields(self) -> None:
         event = EmergencyEvent.from_dict(
             {"title": "t", "hazard_type": "fire", "totally_unknown": 1}
