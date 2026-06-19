@@ -287,9 +287,14 @@ class EmergencyEvent:
         # accept e.g. seen_nodes="nodeA", which would crash mark_seen() later).
         if not isinstance(self.location, dict):
             raise ValueError("location must be an object")
-        for field_name in ("sources", "seen_nodes", "actions"):
-            if not isinstance(getattr(self, field_name), list):
-                raise ValueError(f"{field_name} must be a list")
+        for field_name in ("sources", "seen_nodes"):
+            value = getattr(self, field_name)
+            if not isinstance(value, list) or not all(isinstance(s, str) for s in value):
+                raise ValueError(f"{field_name} must be a list of strings")
+        if not isinstance(self.actions, list) or not all(
+            isinstance(a, dict) for a in self.actions
+        ):
+            raise ValueError("actions must be a list of objects")
 
         # Optional deep validation against the bundled JSON Schema, when present.
         try:

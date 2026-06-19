@@ -79,9 +79,9 @@ def cap_unverified(tier: str | None) -> str:
     """
 
     if not isinstance(tier, str):
-        # Non-string (e.g. JSON number/array): leave it unchanged so the caller's
-        # validate() rejects it with ValueError rather than crashing here.
-        return tier
+        # Non-string (e.g. a JSON number/array): a ValueError here keeps both the
+        # strict-decode guarantee and this helper's str return type intact.
+        raise ValueError(f"trust must be a string, got {type(tier).__name__}")
     normalized = tier.strip().lower()
     if rank(normalized) > rank(UNVERIFIED_CEILING):
         return UNVERIFIED_CEILING

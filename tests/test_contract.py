@@ -64,11 +64,23 @@ class EmergencyEventContractTests(unittest.TestCase):
         restored = EmergencyEvent.from_json(event.to_json())
         self.assertEqual(restored.to_dict(), event.to_dict())
 
-    def test_validate_passes_for_valid_event_and_uses_schema(self) -> None:
+    def test_validate_passes_for_valid_event(self) -> None:
         event = EmergencyEvent.from_normalized(
             normalized=self._normalized(), title="Storm", impact_score=4
         )
         event.validate()  # should not raise
+
+    def test_validate_rejects_wrong_item_types_in_collections(self) -> None:
+        for field_name, bad in (
+            ("sources", [123]),
+            ("seen_nodes", [{"x": 1}]),
+            ("actions", ["not-an-object"]),
+        ):
+            event = EmergencyEvent(title="t", severity="low", confidence=0.5,
+                                   impact_score=5)
+            setattr(event, field_name, bad)
+            with self.assertRaises(ValueError):
+                event.validate()
 
     def test_validate_rejects_bad_values(self) -> None:
         event = EmergencyEvent(title="x", hazard_type="not-a-hazard")
