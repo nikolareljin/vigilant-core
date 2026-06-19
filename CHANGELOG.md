@@ -2,6 +2,17 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.11.0] - 2026-06-19
+
+### Added
+
+- **Plugin kernel** (`plugins/`): turns every capability into a composable plugin of one of four kinds — `SourcePlugin`, `TransportPlugin`, `DevicePlugin`, `SinkPlugin` — all speaking the `EmergencyEvent` contract and reporting health in the uniform v0.8.0 source-health shape.
+  - In-process **`EventBus`** (publish/subscribe) that supersedes the engine's single `on_new_alert` callback, with topics for new events, high-severity events, and inbound transport events.
+  - **Registry + config-driven loader** (`plugins/registry.py`, `plugins/loader.py`): declare plugins in config as `{type, name, enabled, options}`; `type` resolves to a built-in or a `module:ClassName` path. The registry stays fully inert when no plugins are configured.
+  - **Reference plugins**: an RSS source (proves the ingest seam), an MQTT transport publishing schema-valid events to `intel/events/normalized` and `intel/events/high_priority`, and a notification device.
+- **Tests** (`tests/test_plugin_registry.py`) covering bus delivery/isolation, severity-gated routing, source polling, the config loader, and MQTT validation.
+- Adds `paho-mqtt` to requirements; documents the kernel in `docs/architecture.md`.
+
 ## [0.10.0] - 2026-06-19
 
 ### Added
