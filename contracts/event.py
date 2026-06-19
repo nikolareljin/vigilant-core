@@ -202,9 +202,11 @@ class EmergencyEvent:
                 raise ValueError("title must be a non-empty string")
         known = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
         filtered = {k: v for k, v in data.items() if k in known}
-        # Default a missing OR present-but-empty/null title (lenient mode only;
-        # strict decode already rejects an empty required title above).
-        if not filtered.get("title"):
+        # Default only a missing/null title or an empty/whitespace string (lenient
+        # mode). A non-string falsy value (0, False, []) is preserved rather than
+        # masked with the placeholder, so a later validate() can still reject it.
+        title_val = filtered.get("title")
+        if title_val is None or (isinstance(title_val, str) and not title_val.strip()):
             filtered["title"] = "(no title)"
         event = cls(**filtered)
         if strict:
@@ -295,6 +297,14 @@ class EmergencyEvent:
             isinstance(a, dict) for a in self.actions
         ):
             raise ValueError("actions must be a list of objects")
+        # Contractual string fields (schema: string, or string|null for optionals).
+        for field_name in ("summary", "predictive_outcome"):
+            if not isinstance(getattr(self, field_name), str):
+                raise ValueError(f"{field_name} must be a string")
+        for field_name in ("origin_node_id", "url", "signature"):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"{field_name} must be a string or null")
 
         # Optional deep validation against the bundled JSON Schema, when present.
         try:

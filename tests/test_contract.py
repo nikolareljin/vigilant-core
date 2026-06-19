@@ -83,6 +83,21 @@ class EmergencyEventContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             EmergencyEvent.from_json(json.dumps(dict(payload, trust="totally_bogus")))
 
+    def test_validate_rejects_nonstring_optional_fields(self) -> None:
+        for field_name, bad in (
+            ("summary", 5), ("predictive_outcome", []),
+            ("origin_node_id", 7), ("url", {}), ("signature", 1),
+        ):
+            event = EmergencyEvent(title="t", severity="low", confidence=0.5,
+                                   impact_score=5)
+            setattr(event, field_name, bad)
+            with self.assertRaises(ValueError):
+                event.validate()
+
+    def test_lenient_from_dict_preserves_nonstring_title(self) -> None:
+        # 0 is preserved (not masked), so a later validate() can reject it.
+        self.assertEqual(EmergencyEvent.from_dict({"title": 0}).title, 0)
+
     def test_validate_rejects_wrong_item_types_in_collections(self) -> None:
         for field_name, bad in (
             ("sources", [123]),
