@@ -78,6 +78,7 @@ def cap_unverified(tier: str | None) -> str:
     trust for events that actually prove it.
     """
 
-    if rank(tier) > rank(UNVERIFIED_CEILING):
+    normalized = (tier or "").strip().lower()
+    if rank(normalized) > rank(UNVERIFIED_CEILING):
         return UNVERIFIED_CEILING
-    return tier if tier in TRUST_TIERS else DEFAULT_TRUST
+    return normalized if normalized in TRUST_TIERS else DEFAULT_TRUST

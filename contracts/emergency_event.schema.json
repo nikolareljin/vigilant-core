@@ -23,7 +23,7 @@
     },
     "event_id": {
       "type": "string",
-      "pattern": "^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+      "pattern": "^[0-9ABCDEFGHJKMNPQRSTVWXYZabcdefghjkmnpqrstvwxyz]{26}$",
       "description": "Stable 26-char Crockford base32 ULID used for cross-node dedup."
     },
     "origin_node_id": {

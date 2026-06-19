@@ -60,8 +60,10 @@ REQUIRED_ON_DECODE: tuple[str, ...] = (
     "seen_nodes",
 )
 
-# A ULID is 26 Crockford base32 chars (excludes I, L, O, U); accept either case.
-_ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
+# A ULID is 26 Crockford base32 chars. Enumerate the alphabet explicitly (the
+# same set as contracts.ids._CROCKFORD) rather than using ranges, so I/L/O/U can
+# never sneak in via a range boundary. Case-insensitive for interop.
+_ULID_RE = re.compile(r"^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$", re.IGNORECASE)
 
 
 def _looks_like_ulid(value: Any) -> bool:
@@ -342,13 +344,20 @@ class EmergencyEvent:
         resolved_trust = trust or trust_tiers.for_source_kind(source_kind)
         resolved_hazard = hazard_type or infer_hazard_type(title, snippet)
 
+        # Coerce impact_score defensively: callers may pass through unparsed
+        # values, and from_normalized() must not raise while building an event.
+        try:
+            score = int(impact_score)
+        except (TypeError, ValueError):
+            score = 1
+
         return cls(
             title=title or "(no title)",
             origin_node_id=origin_node_id,
             hazard_type=resolved_hazard,
             severity=str(normalized.get("severity", "low")),
             confidence=float(normalized.get("confidence", 0.0) or 0.0),
-            impact_score=max(1, min(10, int(impact_score or 1))),
+            impact_score=max(1, min(10, score)),
             timestamp_utc=normalized.get("timestamp_utc") or _now_iso(),
             event_timestamp_utc=event_timestamp_utc,
             location=location,

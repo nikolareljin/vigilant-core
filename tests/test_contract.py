@@ -226,6 +226,25 @@ class EmergencyEventContractTests(unittest.TestCase):
         self.assertTrue(trust.is_trusted_for_automation("authenticated_api"))
         self.assertFalse(trust.is_trusted_for_automation("open_search"))
 
+    def test_cap_unverified_normalizes_case_and_whitespace(self) -> None:
+        # Differently-cased/spaced tiers must normalize, not silently jump to the
+        # default (which could even upgrade "UNTRUSTED" -> open_search).
+        self.assertEqual(trust.cap_unverified("SIGNED_NODE"), "open_search")
+        self.assertEqual(trust.cap_unverified(" untrusted "), "untrusted")
+        self.assertEqual(trust.cap_unverified("OPEN_SEARCH"), "open_search")
+
+    def test_from_normalized_tolerates_bad_impact_score(self) -> None:
+        event = EmergencyEvent.from_normalized(
+            normalized=self._normalized(), title="x", impact_score="not-a-number"
+        )
+        self.assertEqual(event.impact_score, 1)
+
+    def test_ulid_regex_excludes_crockford_gaps(self) -> None:
+        from contracts.event import _looks_like_ulid
+        self.assertTrue(_looks_like_ulid(new_ulid()))
+        for ch in ("I", "L", "O", "U"):
+            self.assertFalse(_looks_like_ulid(ch * 26))
+
     def test_strict_decode_caps_self_declared_trust(self) -> None:
         # An unauthenticated peer must not promote itself across the automation
         # boundary by self-declaring a high trust tier on the wire.
