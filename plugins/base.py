@@ -59,6 +59,24 @@ def coerce_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def coerce_int(value: Any, default: int) -> int:
+    """Parse a plugin-option int, falling back to ``default`` on bad input."""
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def coerce_float(value: Any, default: float) -> float:
+    """Parse a plugin-option float, falling back to ``default`` on bad input."""
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def is_high_priority(event: EmergencyEvent) -> bool:
     """Whether an event should be routed to high-priority sinks/topics."""
 

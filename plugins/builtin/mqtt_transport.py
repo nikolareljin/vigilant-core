@@ -18,7 +18,14 @@ from typing import Any, Optional
 
 from contracts import EmergencyEvent
 
-from ..base import PluginContext, TransportPlugin, TOPIC_INGEST, coerce_bool, is_high_priority
+from ..base import (
+    PluginContext,
+    TransportPlugin,
+    TOPIC_INGEST,
+    coerce_bool,
+    coerce_int,
+    is_high_priority,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +62,7 @@ class MqttTransportPlugin(TransportPlugin):
             )
             return None
         host = self.options.get("host", "127.0.0.1")
-        port = int(self.options.get("port", 1883))
+        port = coerce_int(self.options.get("port", 1883), 1883)
         client = mqtt.Client()
         username = self.options.get("username")
         if username:
@@ -64,8 +71,8 @@ class MqttTransportPlugin(TransportPlugin):
         # reconnect loop.
         try:
             client.reconnect_delay_set(
-                min_delay=int(self.options.get("reconnect_min_delay", 1)),
-                max_delay=int(self.options.get("reconnect_max_delay", 120)),
+                min_delay=coerce_int(self.options.get("reconnect_min_delay", 1), 1),
+                max_delay=coerce_int(self.options.get("reconnect_max_delay", 120), 120),
             )
         except Exception:  # pragma: no cover - older paho without the setter
             pass
@@ -73,7 +80,9 @@ class MqttTransportPlugin(TransportPlugin):
             # connect_async + loop_start so an initial broker outage doesn't
             # leave the transport permanently dead: paho keeps retrying in the
             # background and connects once the broker is reachable.
-            client.connect_async(host, port, keepalive=int(self.options.get("keepalive", 60)))
+            client.connect_async(
+                host, port, keepalive=coerce_int(self.options.get("keepalive", 60), 60)
+            )
             client.loop_start()
         except Exception as exc:
             logger.warning("MQTT transport %s failed to start: %s", self.name, exc)

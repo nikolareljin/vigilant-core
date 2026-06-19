@@ -20,7 +20,7 @@ import httpx
 from contracts import EmergencyEvent
 from utils.event_normalization import normalize_event_payload
 
-from ..base import PluginContext, SourcePlugin
+from ..base import PluginContext, SourcePlugin, coerce_float
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class RssSourcePlugin(SourcePlugin):
         latitude = getattr(config, "latitude", None) if config else None
         longitude = getattr(config, "longitude", None) if config else None
 
-        timeout = httpx.Timeout(self.options.get("timeout", 20))
+        timeout = httpx.Timeout(coerce_float(self.options.get("timeout", 20), 20.0))
         feed_errors = 0
         try:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
