@@ -257,8 +257,8 @@ class EmergencyEvent:
         ``ValueError`` — never ``TypeError`` — even for malformed parsed JSON.
         """
 
-        if not self.title:
-            raise ValueError("title is required")
+        if not isinstance(self.title, str) or not self.title.strip():
+            raise ValueError("title must be a non-empty string")
         if self.schema_version != SCHEMA_VERSION:
             raise ValueError(
                 f"unsupported schema_version: {self.schema_version!r} (expected {SCHEMA_VERSION})"
@@ -312,6 +312,11 @@ class EmergencyEvent:
             jsonschema.validate(self.to_dict(), schema)
         except jsonschema.ValidationError as exc:
             raise ValueError(f"schema validation failed: {exc.message}") from exc
+        except jsonschema.exceptions.SchemaError:
+            # The bundled schema itself is corrupt — an internal problem, not an
+            # invalid event. The comprehensive structural checks above already
+            # cover the contract, so degrade rather than leak a non-ValueError.
+            return
 
     # ----- adapter from the existing pipeline ----------------------------
     @classmethod

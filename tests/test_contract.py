@@ -70,6 +70,19 @@ class EmergencyEventContractTests(unittest.TestCase):
         )
         event.validate()  # should not raise
 
+    def test_validate_rejects_truthy_nonstring_title(self) -> None:
+        for bad in (123, b"x", ["x"]):
+            event = EmergencyEvent(title=bad, severity="low", confidence=0.5,
+                                   impact_score=5)
+            with self.assertRaises(ValueError):
+                event.validate()
+
+    def test_strict_decode_rejects_unrecognized_trust_tier(self) -> None:
+        full = EmergencyEvent(title="t", severity="high", confidence=0.5, impact_score=6)
+        payload = json.loads(full.to_json())
+        with self.assertRaises(ValueError):
+            EmergencyEvent.from_json(json.dumps(dict(payload, trust="totally_bogus")))
+
     def test_validate_rejects_wrong_item_types_in_collections(self) -> None:
         for field_name, bad in (
             ("sources", [123]),

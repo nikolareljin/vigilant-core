@@ -83,6 +83,11 @@ def cap_unverified(tier: str | None) -> str:
         # strict-decode guarantee and this helper's str return type intact.
         raise ValueError(f"trust must be a string, got {type(tier).__name__}")
     normalized = tier.strip().lower()
+    if normalized not in TRUST_TIERS:
+        # Unrecognized tier: return it as-is (normalized) rather than silently
+        # coercing to a default, so the caller's validate() rejects the malformed
+        # value instead of accepting a self-declared garbage tier.
+        return normalized
     if rank(normalized) > rank(UNVERIFIED_CEILING):
         return UNVERIFIED_CEILING
-    return normalized if normalized in TRUST_TIERS else DEFAULT_TRUST
+    return normalized
