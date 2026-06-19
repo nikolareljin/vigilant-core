@@ -24,15 +24,17 @@ TRUST_TIERS: tuple[str, ...] = (
 # Map each existing source_kind to its default trust tier. New transports register
 # their own tier explicitly when they emit events.
 SOURCE_KIND_TRUST: dict[str, str] = {
-    "rss": "known_feed",
     "news_api": "authenticated_api",
     "google_cse": "open_search",
     "bing_search": "open_search",
     "duckduckgo": "open_search",
-    # emergency_search resolves to open-web (DuckDuckGo) queries via
-    # utils.sources.search_emergency_info, so it is open_search — NOT a curated
-    # feed. Classifying it higher would let open-web content cross the trust
-    # boundary used for automation and prompt-injection defense (issue #70).
+    # The ingest pipeline tags *every* feed item — discovered local feeds, Google
+    # News RSS, Reddit RSS, as well as genuine agency feeds — with source_kind
+    # "rss"/"emergency_search". Since the bucket is mostly uncurated, both map to
+    # open_search so arbitrary feed/web content cannot cross the automation /
+    # prompt-injection trust boundary (issue #70). A dedicated higher-trust
+    # source kind for curated agency feeds (e.g. NWS CAP) can be added later.
+    "rss": "open_search",
     "emergency_search": "open_search",
 }
 

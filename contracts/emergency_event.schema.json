@@ -12,7 +12,9 @@
     "severity",
     "confidence",
     "impact_score",
-    "timestamp_utc"
+    "timestamp_utc",
+    "ttl_hops",
+    "seen_nodes"
   ],
   "properties": {
     "schema_version": {
@@ -21,8 +23,8 @@
     },
     "event_id": {
       "type": "string",
-      "minLength": 1,
-      "description": "Stable ULID used for cross-node dedup."
+      "pattern": "^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$",
+      "description": "Stable 26-char Crockford base32 ULID used for cross-node dedup."
     },
     "origin_node_id": {
       "type": ["string", "null"],
@@ -65,10 +67,12 @@
     },
     "timestamp_utc": {
       "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$",
       "description": "When this event record was observed/created (ISO-8601 UTC)."
     },
     "event_timestamp_utc": {
       "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$",
       "description": "When the underlying hazard occurred (ISO-8601 UTC)."
     },
     "location": {

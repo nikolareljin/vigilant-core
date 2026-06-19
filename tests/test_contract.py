@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from contracts import EmergencyEvent, infer_hazard_type, new_ulid, trust
@@ -44,7 +45,9 @@ class EmergencyEventContractTests(unittest.TestCase):
         # New platform fields derived.
         self.assertEqual(event.schema_version, "2.0")
         self.assertEqual(event.hazard_type, "tornado")
-        self.assertEqual(event.trust, "known_feed")
+        # Generic RSS is uncurated (discovered feeds, Google News, Reddit), so it
+        # is open_search — not trusted for automation.
+        self.assertEqual(event.trust, "open_search")
         self.assertTrue(event.event_id)
         # Geohash enrichment from coordinates.
         self.assertEqual(event.location["geohash"], encode(40.34, -74.65))
@@ -108,6 +111,38 @@ class EmergencyEventContractTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             event.validate()
+
+    def test_validate_enforces_ulid_and_iso_utc_formats(self) -> None:
+        base = EmergencyEvent(title="t", severity="low", confidence=0.5, impact_score=5)
+        base.validate()  # a freshly-minted event has a valid ULID + UTC timestamp
+        # Non-ULID id.
+        bad_id = EmergencyEvent(title="t", severity="low", confidence=0.5,
+                                impact_score=5, event_id="not-a-ulid")
+        with self.assertRaises(ValueError):
+            bad_id.validate()
+        # Non-ISO / non-UTC timestamp.
+        bad_ts = EmergencyEvent(title="t", severity="low", confidence=0.5,
+                                impact_score=5, timestamp_utc="last tuesday")
+        with self.assertRaises(ValueError):
+            bad_ts.validate()
+        # event_timestamp_utc, when present, must also be ISO UTC.
+        bad_ets = EmergencyEvent(title="t", severity="low", confidence=0.5,
+                                 impact_score=5, event_timestamp_utc="nope")
+        with self.assertRaises(ValueError):
+            bad_ets.validate()
+
+    def test_strict_decode_requires_mesh_fields(self) -> None:
+        # A payload omitting ttl_hops/seen_nodes must be rejected, else a
+        # forwarded (possibly TTL-exhausted/looping) event is re-admitted as fresh.
+        full = EmergencyEvent(title="t", severity="high", confidence=0.5, impact_score=6)
+        payload = json.loads(full.to_json())
+        for missing in ("ttl_hops", "seen_nodes"):
+            partial = dict(payload)
+            partial.pop(missing)
+            with self.assertRaises(ValueError):
+                EmergencyEvent.from_dict(partial, strict=True)
+        # The complete payload still decodes.
+        EmergencyEvent.from_dict(payload, strict=True)
 
     def test_from_dict_ignores_unknown_fields(self) -> None:
         event = EmergencyEvent.from_dict(

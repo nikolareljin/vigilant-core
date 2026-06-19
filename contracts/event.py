@@ -12,8 +12,9 @@ recommended ``actions``) enable cross-node propagation, routing, and trust.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional
 
 from . import trust as trust_tiers
@@ -43,7 +44,9 @@ SEVERITIES: tuple[str, ...] = ("low", "medium", "high", "critical")
 
 # Fields a payload received from another node must carry explicitly. We refuse to
 # mint these on decode (see ``from_dict(strict=True)``) because inventing an
-# identity/timestamp would corrupt cross-node dedup and loop detection.
+# identity/timestamp/mesh-state would corrupt cross-node dedup and loop/storm
+# protection (a missing ttl_hops/seen_nodes would otherwise default to a fresh,
+# full-TTL, empty-path event and re-admit an exhausted or looping message).
 REQUIRED_ON_DECODE: tuple[str, ...] = (
     "schema_version",
     "event_id",
@@ -53,7 +56,28 @@ REQUIRED_ON_DECODE: tuple[str, ...] = (
     "severity",
     "confidence",
     "impact_score",
+    "ttl_hops",
+    "seen_nodes",
 )
+
+# A ULID is 26 Crockford base32 chars (excludes I, L, O, U); accept either case.
+_ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
+
+
+def _looks_like_ulid(value: Any) -> bool:
+    return isinstance(value, str) and bool(_ULID_RE.match(value))
+
+
+def _looks_like_iso_utc(value: Any) -> bool:
+    """True if ``value`` is an ISO-8601 timestamp in UTC (``Z`` or ``+00:00``)."""
+
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.utcoffset() == timedelta(0)
 
 # Keyword → hazard_type. First match wins; order matters (specific before generic).
 _HAZARD_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -216,10 +240,14 @@ class EmergencyEvent:
             raise ValueError(
                 f"unsupported schema_version: {self.schema_version!r} (expected {SCHEMA_VERSION})"
             )
-        if not self.event_id:
-            raise ValueError("event_id is required")
-        if not self.timestamp_utc:
-            raise ValueError("timestamp_utc is required")
+        if not _looks_like_ulid(self.event_id):
+            raise ValueError("event_id must be a 26-character ULID")
+        if not _looks_like_iso_utc(self.timestamp_utc):
+            raise ValueError("timestamp_utc must be an ISO-8601 UTC timestamp")
+        if self.event_timestamp_utc is not None and not _looks_like_iso_utc(
+            self.event_timestamp_utc
+        ):
+            raise ValueError("event_timestamp_utc must be an ISO-8601 UTC timestamp")
         if self.hazard_type not in HAZARD_TYPES:
             raise ValueError(f"invalid hazard_type: {self.hazard_type!r}")
         if self.severity not in SEVERITIES:
