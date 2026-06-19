@@ -72,4 +72,6 @@ class NotifyDevicePlugin(DevicePlugin):
                 )
             except Exception:  # pragma: no cover - environment dependent
                 logger.debug("notify-send failed for %s; logging instead", self.name)
-        logger.warning("NOTIFY %s :: %s :: %s", self.name, title, body)
+        # INFO, not WARNING: rendering to the log is normal in headless
+        # deployments and shouldn't drown out real warnings.
+        logger.info("NOTIFY %s :: %s :: %s", self.name, title, body)

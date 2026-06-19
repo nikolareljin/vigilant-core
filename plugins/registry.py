@@ -88,8 +88,9 @@ class PluginRegistry:
         elif isinstance(plugin, DevicePlugin):
             # Devices (sirens/displays) default to high-priority only (severity
             # high/critical OR impact_score >= 7); override with options
-            # {"min_severity": "low"} to receive everything.
-            topic = TOPIC_NEW if plugin.options.get("min_severity") == "low" else TOPIC_HIGH
+            # {"min_severity": "low"} to receive everything (case-insensitive).
+            min_severity = str(plugin.options.get("min_severity", "")).strip().lower()
+            topic = TOPIC_NEW if min_severity == "low" else TOPIC_HIGH
             self._subscribe_egress(topic, self._guard(plugin, plugin.render))
         elif isinstance(plugin, SinkPlugin):
             self._subscribe_egress(TOPIC_NEW, self._guard(plugin, plugin.handle))
