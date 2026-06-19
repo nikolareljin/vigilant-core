@@ -119,6 +119,62 @@ class SQLiteLocalCacheTests(unittest.TestCase):
                     self.assertEqual(history_count, 0)
                     self.assertEqual(source_count, 0)
 
+    def test_fetch_recent_by_time_orders_by_recency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_root = Path(tmpdir)
+            with patch("utils.database.data_dir", return_value=data_root):
+                database.init_db()
+                # Old but high-impact, vs. newer but low-impact.
+                database.insert_alert(
+                    url="https://example.com/old",
+                    title="Old high-impact event",
+                    snippet="",
+                    published_at=None,
+                    source="S",
+                    source_kind="rss",
+                    severity="high",
+                    confidence=0.5,
+                    event_timestamp_utc="2026-01-01T00:00:00Z",
+                    impact_score=10,
+                    predictive_outcome="",
+                    is_relevant=True,
+                    subject="x",
+                    location_name="y",
+                )
+                database.insert_alert(
+                    url="https://example.com/new",
+                    title="New low-impact event",
+                    snippet="",
+                    published_at=None,
+                    source="S",
+                    source_kind="rss",
+                    severity="low",
+                    confidence=0.5,
+                    event_timestamp_utc="2026-06-01T00:00:00Z",
+                    impact_score=1,
+                    predictive_outcome="",
+                    is_relevant=True,
+                    subject="x",
+                    location_name="y",
+                )
+                # Pin created_at so recency ordering is deterministic.
+                with database.connect() as conn:
+                    conn.execute(
+                        "UPDATE alerts SET created_at=? WHERE url=?",
+                        ("2026-01-01 00:00:00", "https://example.com/old"),
+                    )
+                    conn.execute(
+                        "UPDATE alerts SET created_at=? WHERE url=?",
+                        ("2026-06-01 00:00:00", "https://example.com/new"),
+                    )
+
+                by_time = database.fetch_recent_by_time(10)
+                by_impact = database.fetch_recent(10)
+                # Recency order surfaces the newest (low-impact) alert first;
+                # impact order would have dropped/deprioritized it.
+                self.assertEqual(by_time[0]["url"], "https://example.com/new")
+                self.assertEqual(by_impact[0]["url"], "https://example.com/old")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -317,20 +317,38 @@ def _insert_source_metadata(
         )
 
 
+_ALERT_SELECT_COLUMNS: str = (
+    "id, url, title, snippet, published_at, source, "
+    "source_kind, severity, confidence, event_timestamp_utc, "
+    "location_zip_code, location_latitude, location_longitude, "
+    "impact_score, predictive_outcome, is_relevant, subject, location_name, "
+    "created_at"
+)
+
+
 def fetch_recent(limit: int = 200) -> List[sqlite3.Row]:
+    """Fetch alerts ranked by impact then recency (for ranked display lists)."""
     with connect() as conn:
         cur = conn.execute(
-            """
-            SELECT id, url, title, snippet, published_at, source,
-                   source_kind,
-                   severity, confidence, event_timestamp_utc,
-                   location_zip_code, location_latitude, location_longitude,
-                   impact_score, predictive_outcome, is_relevant, subject, location_name,
-                   created_at
-            FROM alerts
-            ORDER BY impact_score DESC, created_at DESC
-            LIMIT ?
-            """,
+            f"SELECT {_ALERT_SELECT_COLUMNS} FROM alerts "
+            "ORDER BY impact_score DESC, created_at DESC LIMIT ?",
+            (limit,),
+        )
+        return list(cur.fetchall())
+
+
+def fetch_recent_by_time(limit: int = 200) -> List[sqlite3.Row]:
+    """Fetch alerts ordered by recency (newest first).
+
+    Used to build the candidate pool for relevance-aware context selection,
+    where freshness is what matters: ordering by impact (as ``fetch_recent``
+    does) can drop low-impact but very recent alerts from a capped pool and
+    starve the CURRENT tier of genuinely current context.
+    """
+    with connect() as conn:
+        cur = conn.execute(
+            f"SELECT {_ALERT_SELECT_COLUMNS} FROM alerts "
+            "ORDER BY created_at DESC, impact_score DESC LIMIT ?",
             (limit,),
         )
         return list(cur.fetchall())

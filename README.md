@@ -39,6 +39,7 @@ cd vigilant-core
 ## Key Features
 
 - **AI-Powered Insights**: Ask specific monitoring questions and get AI-generated answers
+- **Relevance-Aware Reasoning Context**: Insight prompts only inject alerts that are fresh *and* on-topic for your question, while preserving older records that remain *structurally* relevant (e.g. past power-grid failures inform grid risk in a new storm). Stale or off-topic data — like leftover snow forecasts during a summer storm — no longer pollutes the reasoning. Tunable via `context_*` settings.
 - **Impact Scoring**: Every alert scored 1-10 for relevance and urgency
 - **Location-Aware**: Filter alerts by ZIP code, coordinates, or radius
 - **Automatic Local Discovery**: When you provide a ZIP code, automatically finds:
