@@ -105,6 +105,34 @@ class EmergencyEventContractTests(unittest.TestCase):
         )
         self.assertEqual(event.hazard_type, "fire")
 
+    def test_from_json_rejects_incomplete_payload(self) -> None:
+        # Decoding a transport payload must NOT mint a missing event_id/timestamp;
+        # an incomplete payload is rejected so receivers don't assign new
+        # identities and corrupt cross-node dedup.
+        with self.assertRaises(ValueError):
+            EmergencyEvent.from_json("{}")
+        with self.assertRaises(ValueError):
+            EmergencyEvent.from_json("not json")
+        # A complete payload round-trips fine under strict decode.
+        full = EmergencyEvent(title="t", hazard_type="fire", severity="high",
+                              confidence=0.5, impact_score=6)
+        self.assertEqual(EmergencyEvent.from_json(full.to_json()).event_id, full.event_id)
+
+    def test_from_dict_lenient_for_local_construction(self) -> None:
+        # Local construction (strict=False, the default) still mints an id.
+        event = EmergencyEvent.from_dict({"title": "t"})
+        self.assertTrue(event.event_id)
+
+    def test_validate_rejects_malformed_structured_fields(self) -> None:
+        event = EmergencyEvent(title="t", severity="low", confidence=0.5, impact_score=5)
+        event.seen_nodes = "nodeA"  # should be a list
+        with self.assertRaises(ValueError):
+            event.validate()
+        event2 = EmergencyEvent(title="t", severity="low", confidence=0.5, impact_score=5)
+        event2.location = "somewhere"  # should be an object
+        with self.assertRaises(ValueError):
+            event2.validate()
+
     def test_hazard_inference(self) -> None:
         self.assertEqual(infer_hazard_type("Wildfire near town"), "fire")
         self.assertEqual(infer_hazard_type("Category 4 hurricane"), "hurricane")

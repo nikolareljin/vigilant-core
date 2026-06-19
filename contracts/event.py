@@ -41,6 +41,20 @@ HAZARD_TYPES: tuple[str, ...] = (
 
 SEVERITIES: tuple[str, ...] = ("low", "medium", "high", "critical")
 
+# Fields a payload received from another node must carry explicitly. We refuse to
+# mint these on decode (see ``from_dict(strict=True)``) because inventing an
+# identity/timestamp would corrupt cross-node dedup and loop detection.
+REQUIRED_ON_DECODE: tuple[str, ...] = (
+    "schema_version",
+    "event_id",
+    "title",
+    "timestamp_utc",
+    "hazard_type",
+    "severity",
+    "confidence",
+    "impact_score",
+)
+
 # Keyword → hazard_type. First match wins; order matters (specific before generic).
 _HAZARD_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("hurricane", ("hurricane", "typhoon", "cyclone")),
@@ -127,7 +141,25 @@ class EmergencyEvent:
         return json.dumps(self.to_dict(), sort_keys=True, ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "EmergencyEvent":
+    def from_dict(cls, data: Mapping[str, Any], *, strict: bool = False) -> "EmergencyEvent":
+        """Build an event from a mapping.
+
+        With ``strict=True`` (the default for :meth:`from_json`, i.e. decoding a
+        payload received from another node), required fields must be present and
+        non-empty — we refuse to *mint* a missing ``event_id`` or ``timestamp_utc``
+        on decode, since inventing identities would corrupt cross-node dedup and
+        loop detection. Lenient mode (the default here) is for locally-constructed
+        events, where defaults like a fresh ULID are intended.
+        """
+
+        if not isinstance(data, Mapping):
+            raise ValueError("event payload must be a JSON object")
+        if strict:
+            missing = [k for k in REQUIRED_ON_DECODE if data.get(k) in (None, "")]
+            if missing:
+                raise ValueError(
+                    f"payload missing required field(s): {', '.join(missing)}"
+                )
         known = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
         filtered = {k: v for k, v in data.items() if k in known}
         if "title" not in filtered:
@@ -135,8 +167,15 @@ class EmergencyEvent:
         return cls(**filtered)
 
     @classmethod
-    def from_json(cls, raw: str | bytes) -> "EmergencyEvent":
-        return cls.from_dict(json.loads(raw))
+    def from_json(cls, raw: str | bytes, *, strict: bool = True) -> "EmergencyEvent":
+        """Decode an event from JSON. Strict by default: payloads from transports
+        that omit required fields are rejected, not silently completed."""
+
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise ValueError(f"invalid event JSON: {exc}") from exc
+        return cls.from_dict(data, strict=strict)
 
     # ----- mesh helpers --------------------------------------------------
     def mark_seen(self, node_id: str) -> None:
@@ -191,6 +230,13 @@ class EmergencyEvent:
             raise ValueError("ttl_hops must be non-negative")
         if self.trust not in trust_tiers.TRUST_TIERS:
             raise ValueError(f"invalid trust tier: {self.trust!r}")
+        # Structured-field shapes (caught here so the no-jsonschema path doesn't
+        # accept e.g. seen_nodes="nodeA", which would crash mark_seen() later).
+        if not isinstance(self.location, dict):
+            raise ValueError("location must be an object")
+        for field_name in ("sources", "seen_nodes", "actions"):
+            if not isinstance(getattr(self, field_name), list):
+                raise ValueError(f"{field_name} must be a list")
 
         # Optional deep validation against the bundled JSON Schema, when present.
         try:
