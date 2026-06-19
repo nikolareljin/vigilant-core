@@ -72,6 +72,11 @@ class AppConfig:
     context_max_current: int = 20
     context_max_historical: int = 6
     context_enable_historical: bool = True
+    # Mesh node identity (platform: emergency-services coordination).
+    node_label: Optional[str] = None
+    node_role: str = "hub"
+    # Plugin kernel: list of {type, name, enabled, options} entries.
+    plugins: List[dict] = field(default_factory=list)
 
 
 def config_dir() -> Path:
@@ -201,6 +206,9 @@ def load_config() -> AppConfig:
         context_enable_historical=_coerce_bool(
             data.get("context_enable_historical", True), True
         ),
+        node_label=data.get("node_label"),
+        node_role=str(data.get("node_role", "hub") or "hub"),
+        plugins=list(data.get("plugins", []) or []),
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
     cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
@@ -257,6 +265,9 @@ def save_config(config: AppConfig) -> None:
         "context_max_current": config.context_max_current,
         "context_max_historical": config.context_max_historical,
         "context_enable_historical": config.context_enable_historical,
+        "node_label": config.node_label,
+        "node_role": config.node_role,
+        "plugins": config.plugins,
     }
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
     env_lines = []

@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigilant-core/contracts/emergency_event.schema.json",
+  "title": "EmergencyEvent",
+  "description": "Canonical cross-node emergency event contract for the VigilantCore platform.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "title",
+    "hazard_type",
+    "severity",
+    "confidence",
+    "impact_score",
+    "timestamp_utc"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "2.0"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable ULID used for cross-node dedup."
+    },
+    "origin_node_id": {
+      "type": ["string", "null"],
+      "description": "Node that first observed/produced the event."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hazard_type": {
+      "type": "string",
+      "enum": [
+        "storm",
+        "hurricane",
+        "tornado",
+        "fire",
+        "flood",
+        "earthquake",
+        "outage",
+        "hazmat",
+        "conflict",
+        "transport",
+        "medical",
+        "other"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "impact_score": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "description": "When this event record was observed/created (ISO-8601 UTC)."
+    },
+    "event_timestamp_utc": {
+      "type": ["string", "null"],
+      "description": "When the underlying hazard occurred (ISO-8601 UTC)."
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "zip_code": {"type": ["string", "null"]},
+        "latitude": {"type": ["number", "null"]},
+        "longitude": {"type": ["number", "null"]},
+        "radius_km": {"type": ["number", "null"]},
+        "geohash": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "summary": {"type": "string"},
+    "predictive_outcome": {"type": "string"},
+    "url": {"type": ["string", "null"]},
+    "sources": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "trust": {
+      "type": "string",
+      "enum": [
+        "untrusted",
+        "open_search",
+        "known_feed",
+        "authenticated_api",
+        "signed_node"
+      ]
+    },
+    "ttl_hops": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Remaining mesh hops; decremented on each forward (storm protection)."
+    },
+    "seen_nodes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Nodes that have handled this event (loop prevention)."
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {"type": "string"},
+          "detail": {"type": "string"},
+          "status": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "signature": {
+      "type": ["string", "null"],
+      "description": "Optional Ed25519 signature over the canonical event (Phase 4)."
+    }
+  },
+  "additionalProperties": true
+}

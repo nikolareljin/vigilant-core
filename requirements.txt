@@ -8,3 +8,5 @@ pgeocode
 flask
 beautifulsoup4
 psutil
+jsonschema
+paho-mqtt
