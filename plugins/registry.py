@@ -41,6 +41,9 @@ class PluginRegistry:
         self.bus = EventBus()
         self._plugins: List[Plugin] = []
         self._started = False
+        # (topic, handler) pairs wired in _wire_egress, so stop_all can remove
+        # them and a subsequent start_all doesn't double-subscribe.
+        self._egress_subs: List[tuple[str, Callable[[EmergencyEvent], None]]] = []
 
     # ----- registration / lifecycle -------------------------------------
     def register(self, plugin: Plugin) -> None:
@@ -73,19 +76,23 @@ class PluginRegistry:
                 plugin.health.record_error("start failed")
         self._started = True
 
+    def _subscribe_egress(self, topic: str, handler: Callable[[EmergencyEvent], None]) -> None:
+        self.bus.subscribe(topic, handler)
+        self._egress_subs.append((topic, handler))
+
     def _wire_egress(self, plugin: Plugin) -> None:
         """Subscribe egress plugins to the appropriate bus topics."""
 
         if isinstance(plugin, TransportPlugin):
             # Transports get every event; they decide normal vs high internally.
-            self.bus.subscribe(TOPIC_NEW, self._guard(plugin, plugin.send))
+            self._subscribe_egress(TOPIC_NEW, self._guard(plugin, plugin.send))
         elif isinstance(plugin, DevicePlugin):
             # Devices (sirens/displays) default to high-severity only; override
             # with options {"min_severity": "low"} to receive everything.
             topic = TOPIC_NEW if plugin.options.get("min_severity") == "low" else TOPIC_HIGH
-            self.bus.subscribe(topic, self._guard(plugin, plugin.render))
+            self._subscribe_egress(topic, self._guard(plugin, plugin.render))
         elif isinstance(plugin, SinkPlugin):
-            self.bus.subscribe(TOPIC_NEW, self._guard(plugin, plugin.handle))
+            self._subscribe_egress(TOPIC_NEW, self._guard(plugin, plugin.handle))
 
     def _guard(self, plugin: Plugin, fn: Callable[[EmergencyEvent], None]):
         """Wrap an egress handler so it records health and never raises into the bus."""
@@ -106,6 +113,11 @@ class PluginRegistry:
                 plugin.stop()
             except Exception:
                 logger.exception("Failed to stop plugin %s", plugin.name)
+        # Remove egress subscriptions so a later start_all() re-wires cleanly
+        # instead of double-delivering events to every plugin.
+        for topic, handler in self._egress_subs:
+            self.bus.unsubscribe(topic, handler)
+        self._egress_subs.clear()
         self._started = False
 
     # ----- engine integration -------------------------------------------

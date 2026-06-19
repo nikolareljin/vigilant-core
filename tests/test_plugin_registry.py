@@ -122,6 +122,22 @@ class RegistryRoutingTests(unittest.TestCase):
         registry = build_registry(cfg, node_id="NODE-A")
         self.assertEqual(registry.plugins, [])
 
+    def test_restart_does_not_double_subscribe(self) -> None:
+        cfg = _Cfg([
+            {"type": "notify_device", "name": "log",
+             "options": {"min_severity": "low", "desktop": False}},
+        ])
+        registry = build_registry(cfg, node_id="NODE-A")
+        log = registry.plugins[0]
+        registry.publish(_event("low"))
+        self.assertEqual(len(log.rendered), 1)
+        # Stop then start again (config reload / reconnect) must not leave a
+        # stale subscription that double-delivers.
+        registry.stop_all()
+        registry.start_all()
+        registry.publish(_event("low"))
+        self.assertEqual(len(log.rendered), 2)
+
     def test_inert_registry_with_no_plugins(self) -> None:
         registry = build_registry(_Cfg([]), node_id="NODE-A")
         # publish must be a no-op and never raise.
@@ -163,6 +179,24 @@ class IngestSubscriptionTests(unittest.TestCase):
         registry.subscribe_ingest(got.append)
         registry.bus.publish(TOPIC_INGEST, _event())
         self.assertEqual(len(got), 1)
+
+
+class ConfigPersistenceTests(unittest.TestCase):
+    def test_appconfig_persists_plugins(self) -> None:
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from utils.config import AppConfig, load_config, save_config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("utils.config.config_dir", return_value=Path(tmp)):
+                cfg = AppConfig(plugins=[
+                    {"type": "mqtt_transport", "name": "bus", "enabled": True,
+                     "options": {"host": "127.0.0.1"}},
+                ])
+                save_config(cfg)
+                loaded = load_config()
+                self.assertEqual(loaded.plugins, cfg.plugins)
 
 
 class LoaderTests(unittest.TestCase):

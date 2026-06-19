@@ -109,9 +109,11 @@ Phase 1 ships the model + reference algorithm; Phase 2's radios drive it.
 
 ## How the engine uses it
 
-`engine/monitor.py` (`MonitorEngine`) gains a platform layer that degrades
-gracefully — if an optional plugin/transport dependency is missing, monitoring
-still runs:
+A later release wires this kernel into `engine/monitor.py` (`MonitorEngine`) as a
+platform layer that degrades gracefully — if an optional plugin/transport
+dependency is missing, monitoring still runs. Until then the kernel is
+self-contained and driven directly (`build_registry(config)` +
+`registry.publish(event)`); the wiring will be:
 
 1. **Ingest** — `gather_items()` additionally pulls `registry.poll_sources()`
    and any buffered inbound transport events, feeding them through the same
