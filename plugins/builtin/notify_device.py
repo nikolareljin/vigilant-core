@@ -46,9 +46,18 @@ class NotifyDevicePlugin(DevicePlugin):
 
         self.rendered.append({"title": title, "body": body, "event_id": event.event_id})
         if self._notify_send:
+            # Map event severity to a notify-send urgency level so a device
+            # configured to receive lower-severity events doesn't show them all
+            # as critical.
+            urgency = {
+                "critical": "critical",
+                "high": "critical",
+                "medium": "normal",
+                "low": "low",
+            }.get(str(event.severity).lower(), "normal")
             try:
                 subprocess.run(
-                    [self._notify_send, "-u", "critical", title, body],
+                    [self._notify_send, "-u", urgency, title, body],
                     check=False,
                     timeout=5,
                 )

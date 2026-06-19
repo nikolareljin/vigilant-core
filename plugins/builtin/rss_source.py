@@ -29,7 +29,16 @@ class RssSourcePlugin(SourcePlugin):
     """Fetch one or more RSS feeds listed in ``options['feeds']``."""
 
     async def poll(self, ctx: PluginContext) -> List[EmergencyEvent]:
-        feeds = list(self.options.get("feeds", []) or [])
+        raw_feeds = self.options.get("feeds", [])
+        if not isinstance(raw_feeds, list):
+            # A user-edited string would otherwise iterate character-by-character.
+            logger.warning(
+                "RSS plugin %s: 'feeds' must be a list, got %s; ignoring",
+                self.name,
+                type(raw_feeds).__name__,
+            )
+            return []
+        feeds = [str(f) for f in raw_feeds if f]
         if not feeds:
             return []
         started = perf_counter()
