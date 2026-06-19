@@ -53,7 +53,7 @@ prompts. `contracts.trust` maps legacy `source_kind`s to tiers and exposes
 {
   "schema_version": "2.0",
   "event_id": "01J9Z3R8K2QF7M4V0WXYABCDEF",
-  "origin_node_id": "01J9Z000NODE000000000HUB00",
+  "origin_node_id": "01J9Z000V8HKMNPQRSTVWXYZ23",
   "title": "Tornado Warning issued for Mercer County",
   "hazard_type": "tornado",
   "severity": "high",
@@ -69,7 +69,7 @@ prompts. `contracts.trust` maps legacy `source_kind`s to tiers and exposes
   "sources": ["NWS"],
   "trust": "known_feed",
   "ttl_hops": 4,
-  "seen_nodes": ["01J9Z000NODE000000000HUB00"],
+  "seen_nodes": ["01J9Z000V8HKMNPQRSTVWXYZ23"],
   "actions": [],
   "signature": null
 }

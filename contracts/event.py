@@ -190,8 +190,10 @@ class EmergencyEvent:
                 )
         known = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
         filtered = {k: v for k, v in data.items() if k in known}
-        if "title" not in filtered:
-            filtered["title"] = data.get("title") or "(no title)"
+        # Default a missing OR present-but-empty/null title (lenient mode only;
+        # strict decode already rejects an empty required title above).
+        if not filtered.get("title"):
+            filtered["title"] = "(no title)"
         event = cls(**filtered)
         if strict:
             # Unauthenticated transport: a sender must not self-declare a tier

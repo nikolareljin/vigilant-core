@@ -184,6 +184,12 @@ class EmergencyEventContractTests(unittest.TestCase):
         event = EmergencyEvent.from_dict({"title": "t"})
         self.assertTrue(event.event_id)
 
+    def test_from_dict_defaults_empty_or_null_title(self) -> None:
+        # A present-but-null/empty title is defaulted, not left as None.
+        self.assertEqual(EmergencyEvent.from_dict({"title": None}).title, "(no title)")
+        self.assertEqual(EmergencyEvent.from_dict({"title": ""}).title, "(no title)")
+        self.assertEqual(EmergencyEvent.from_dict({}).title, "(no title)")
+
     def test_validate_rejects_malformed_structured_fields(self) -> None:
         event = EmergencyEvent(title="t", severity="low", confidence=0.5, impact_score=5)
         event.seen_nodes = "nodeA"  # should be a list
