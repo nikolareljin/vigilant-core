@@ -16,6 +16,7 @@ if str(ROOT_DIR) not in sys.path:
 from engine.monitor import MonitorEngine  # noqa: E402
 from utils import database  # noqa: E402
 from utils.config import AppConfig, config_path, load_config, save_config  # noqa: E402
+from utils.context_selection import build_context_text, select_context  # noqa: E402
 from utils.insight import (  # noqa: E402
     normalize_suggestions as _normalize_suggestions,
     normalize_suggestions_origin as _normalize_suggestions_origin,
@@ -28,7 +29,9 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
     if not config.question or not config.question.strip():
         return None
 
-    alerts = database.fetch_recent(50)
+    # Recency-ordered candidate pool: freshness drives CURRENT selection, so the
+    # pool must contain the newest alerts even if their impact score is low.
+    alerts = database.fetch_recent_by_time(200)
     if not alerts:
         return {
             "question": config.question,
@@ -39,22 +42,32 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             "sources_used": [],
         }
 
-    # Build context from alerts
-    alert_summaries = []
-    sources_used = set()
-    for alert in alerts[:30]:
-        title = alert["title"] or ""
-        snippet = alert["snippet"] or ""
-        source = alert["source"] or "Unknown"
-        score = alert["impact_score"] or 0
-        prediction = alert["predictive_outcome"] or ""
-        sources_used.add(source)
-        alert_summaries.append(
-            f"- [{source}] (impact: {score}/10) {title}. {snippet[:200]}"
-            + (f" Prediction: {prediction}" if prediction else "")
-        )
+    # Select a relevance-aware context: fresh + on-topic alerts as CURRENT, and
+    # structurally relevant older alerts as HISTORICAL background. This keeps
+    # stale or off-topic data (e.g. snow forecasts during a summer storm) from
+    # polluting the reasoning while preserving causally useful history.
+    selection = select_context(
+        alerts,
+        question=config.question,
+        subject=config.subject,
+        fresh_window_hours=config.context_fresh_window_hours,
+        min_relevance=config.context_min_relevance,
+        max_current=config.context_max_current,
+        max_historical=config.context_max_historical,
+        enable_historical=config.context_enable_historical,
+    )
+    if selection.is_empty:
+        return {
+            "question": config.question,
+            "summary": "No relevant data available.",
+            "explanation": "No collected alerts are relevant to this question yet.",
+            "suggestions": [],
+            "suggestions_origin": "none",
+            "sources_used": [],
+        }
 
-    context = "\n".join(alert_summaries)
+    context = build_context_text(selection)
+    sources_used = selection.sources_used
 
     try:
         from ollama import Client as OllamaClient
@@ -81,13 +94,19 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             f"You are an intelligence analyst. Based on the collected news and alerts about "
             f"'{config.subject}' in '{config.location_name}', answer the user's monitoring question. "
             f"Be concise, factual, and cite specific alerts when relevant. "
-            f"If asked about probability or likelihood, provide a percentage estimate with brief reasoning."
+            f"If asked about probability or likelihood, provide a percentage estimate with brief reasoning. "
+            f"The alerts are split into two groups. Treat 'CURRENT & RELEVANT ALERTS' as present-day "
+            f"conditions, and within that group ignore any item that pertains to a different season or "
+            f"event type than the question. Treat 'HISTORICAL CONTEXT' as background about past events: it "
+            f"is intentionally cross-event, so it may describe a different season or event type and should "
+            f"still be used to reason about persistent structural risks (e.g. a recurring power-grid "
+            f"weakness) — but never as current conditions, and never quote its forecasts or figures as "
+            f"present-day facts."
         )
 
         prompt_lines = [
             f"MONITORING QUESTION: {config.question}",
             "",
-            "RECENT ALERTS AND NEWS:",
             context,
             "",
             "Provide your response as JSON with these keys:",
@@ -136,7 +155,7 @@ def generate_insight(config: AppConfig) -> Optional[Dict]:
             "explanation": payload.get("explanation", ""),
             "suggestions": suggestions,
             "suggestions_origin": _normalize_suggestions_origin(payload.get("suggestions_origin"), suggestions),
-            "sources_used": list(sources_used)[:10],
+            "sources_used": sorted(sources_used)[:10],
         }
 
     except Exception as e:

@@ -66,6 +66,12 @@ class AppConfig:
     enable_duckduckgo_search: bool = True
     enable_ai_suggestions: bool = True
     low_bandwidth_mode: bool = False
+    # Relevance-aware reasoning context controls.
+    context_fresh_window_hours: float = 24.0
+    context_min_relevance: float = 0.12
+    context_max_current: int = 20
+    context_max_historical: int = 6
+    context_enable_historical: bool = True
 
 
 def config_dir() -> Path:
@@ -94,6 +100,41 @@ def config_path() -> Path:
 
 def env_path() -> Path:
     return config_dir() / ".env"
+
+
+def _coerce_float(value: object, default: float) -> float:
+    """Parse a config value as float, falling back to ``default`` if invalid."""
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_int(value: object, default: int) -> int:
+    """Parse a config value as int, falling back to ``default`` if invalid."""
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_bool(value: object, default: bool) -> bool:
+    """Parse a config value as bool, recognizing common JSON string forms.
+
+    A bare ``bool("false")`` is ``True``, which is a footgun for user-edited
+    config.json, so accept the usual string spellings explicitly.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("1", "true", "yes", "on"):
+            return True
+        if lowered in ("0", "false", "no", "off"):
+            return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
 
 
 def load_config() -> AppConfig:
@@ -129,12 +170,12 @@ def load_config() -> AppConfig:
         latitude=data.get("latitude"),
         longitude=data.get("longitude"),
         radius_km=int(data.get("radius_km", 50)),
-        relax_location_filter=bool(data.get("relax_location_filter", False)),
-        prefer_light_model=bool(data.get("prefer_light_model", True)),
+        relax_location_filter=_coerce_bool(data.get("relax_location_filter", False), False),
+        prefer_light_model=_coerce_bool(data.get("prefer_light_model", True), True),
         insight_refresh_minutes=int(data.get("insight_refresh_minutes", 5)),
         rss_feeds=data.get("rss_feeds", []),
-        use_only_rss_feeds=bool(data.get("use_only_rss_feeds", False)),
-        disable_rss_fetch=bool(data.get("disable_rss_fetch", False)),
+        use_only_rss_feeds=_coerce_bool(data.get("use_only_rss_feeds", False), False),
+        disable_rss_fetch=_coerce_bool(data.get("disable_rss_fetch", False), False),
         polling_minutes=int(data.get("polling_minutes", 5)),
         news_api_key=data.get("news_api_key"),
         news_time_window_hours=int(data.get("news_time_window_hours", 6)),
@@ -146,9 +187,20 @@ def load_config() -> AppConfig:
         bing_search_endpoint=data.get("bing_search_endpoint"),
         bing_search_market=data.get("bing_search_market"),
         bing_search_safe=data.get("bing_search_safe"),
-        enable_duckduckgo_search=bool(data.get("enable_duckduckgo_search", True)),
-        enable_ai_suggestions=bool(data.get("enable_ai_suggestions", True)),
-        low_bandwidth_mode=bool(data.get("low_bandwidth_mode", False)),
+        enable_duckduckgo_search=_coerce_bool(data.get("enable_duckduckgo_search", True), True),
+        enable_ai_suggestions=_coerce_bool(data.get("enable_ai_suggestions", True), True),
+        low_bandwidth_mode=_coerce_bool(data.get("low_bandwidth_mode", False), False),
+        context_fresh_window_hours=_coerce_float(
+            data.get("context_fresh_window_hours", 24), 24.0
+        ),
+        context_min_relevance=_coerce_float(
+            data.get("context_min_relevance", 0.12), 0.12
+        ),
+        context_max_current=_coerce_int(data.get("context_max_current", 20), 20),
+        context_max_historical=_coerce_int(data.get("context_max_historical", 6), 6),
+        context_enable_historical=_coerce_bool(
+            data.get("context_enable_historical", True), True
+        ),
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
     cfg.display_timezone = cfg.display_timezone or _load_display_timezone_from_env()
@@ -200,6 +252,11 @@ def save_config(config: AppConfig) -> None:
         "enable_duckduckgo_search": config.enable_duckduckgo_search,
         "enable_ai_suggestions": config.enable_ai_suggestions,
         "low_bandwidth_mode": config.low_bandwidth_mode,
+        "context_fresh_window_hours": config.context_fresh_window_hours,
+        "context_min_relevance": config.context_min_relevance,
+        "context_max_current": config.context_max_current,
+        "context_max_historical": config.context_max_historical,
+        "context_enable_historical": config.context_enable_historical,
     }
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
     env_lines = []

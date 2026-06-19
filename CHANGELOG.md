@@ -2,6 +2,25 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.9.0] - 2026-06-18
+
+### Added
+
+- **Relevance-aware reasoning context** (`utils/context_selection.py`): a deterministic, dependency-free selection layer that decides which stored alerts are injected into the AI insight prompt, replacing the previous "dump the most recent alerts" behaviour. It splits candidates into two clearly-labeled tiers:
+  - **CURRENT & RELEVANT** — alerts within a freshness window *and* topically relevant to the monitoring question/subject (token coverage + aspect overlap).
+  - **HISTORICAL CONTEXT** — older alerts that share an *infrastructure* aspect with the question (power grid, flooding, transport, structural, communications, water), retained as background about persistent structural risk. For example, a power-grid failure during a past snow storm is kept when reasoning about grid risk in a summer storm, while a stale "12 inches of snow expected" forecast is excluded.
+- **Aspect taxonomy** mapping event keywords to event-type and infrastructure aspects, with `extract_aspects()` and `relevance_score()` helpers (reusing the shared `_tokenize`/`_jaccard` deduplication primitives).
+- **Context selection settings** in `AppConfig`: `context_fresh_window_hours` (24), `context_min_relevance` (0.12), `context_max_current` (20), `context_max_historical` (6), and `context_enable_historical` (true), all persisted via config load/save.
+- **Tests** (`tests/test_context_selection.py`) covering freshness filtering, off-topic exclusion, structural-history retention, the disabled-historical path, accurate `sources_used`, and timestamp edge cases.
+
+### Changed
+
+- **AI insight prompts** (`src/main.py`, `src/web_app.py`) now build context through the shared selector instead of a duplicated inline loop, widen the candidate pool to 200 so low-impact-but-structurally-relevant history can surface, and derive `sources_used` only from alerts actually used. The system prompt instructs the model to treat the HISTORICAL section strictly as background structural risk — never as current conditions — and to ignore data from a different season or event type than the question.
+
+### Fixed
+
+- **Stale-content pollution across runs**: alerts from a *previous* event no longer leak into the reasoning as current conditions on later runs; they only resurface as explicitly-labeled historical background when structurally relevant. Records are preserved in storage — irrelevant ones are simply not injected.
+
 ## [0.8.1] - 2026-03-02
 
 ### Fixed

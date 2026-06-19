@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-import re
 from typing import Iterable
+
+from .text_similarity import jaccard as _jaccard, tokenize as _tokenize
 
 
 SOURCE_KIND_PRIORITY = {
@@ -25,27 +26,6 @@ _TITLE_PLACEHOLDERS = {
     "untitled",
     "(untitled)",
 }
-
-_WORD_RE = re.compile(r"[a-z0-9]+")
-_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "at",
-    "by",
-    "for",
-    "from",
-    "in",
-    "into",
-    "is",
-    "of",
-    "on",
-    "or",
-    "the",
-    "to",
-    "with",
-}
-
 
 @dataclass
 class DeduplicatedEvent:
@@ -82,14 +62,6 @@ def _to_utc_datetime(value: str | None) -> datetime | None:
         return None
 
 
-def _tokenize(text: str) -> set[str]:
-    return {
-        token
-        for token in _WORD_RE.findall((text or "").lower())
-        if len(token) >= 3 and token not in _STOPWORDS
-    }
-
-
 def _title_fingerprint(title: str) -> str:
     tokens = sorted(_tokenize(title))
     if not tokens:
@@ -103,16 +75,6 @@ def _normalize_title_for_match(title: str) -> str:
     if lowered in _TITLE_PLACEHOLDERS:
         return ""
     return raw
-
-
-def _jaccard(left: set[str], right: set[str]) -> float:
-    if not left and not right:
-        return 1.0
-    if not left or not right:
-        return 0.0
-    overlap = left & right
-    union = left | right
-    return len(overlap) / len(union)
 
 
 def _is_overlap(
