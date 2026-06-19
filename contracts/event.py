@@ -60,6 +60,24 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _as_float(value: Any, field_name: str) -> float:
+    """Coerce to float, raising ``ValueError`` (not ``TypeError``) on bad input."""
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be a number") from None
+
+
+def _as_int(value: Any, field_name: str) -> int:
+    """Coerce to int, raising ``ValueError`` (not ``TypeError``) on bad input."""
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be an integer") from None
+
+
 def infer_hazard_type(*texts: str | None) -> str:
     """Classify a hazard from free text using the keyword taxonomy."""
 
@@ -143,33 +161,53 @@ class EmergencyEvent:
     def validate(self) -> None:
         """Raise ``ValueError`` if the event violates the contract invariants.
 
-        Uses ``jsonschema`` against the bundled schema when available, and always
-        applies the cheap structural checks so validation works on dependency-free
-        edge nodes too.
+        The structural checks below fully cover the schema's required invariants
+        and always run, so validation is correct even on dependency-free edge
+        nodes (no ``jsonschema``) and in packaged builds where the schema file may
+        not be bundled. When ``jsonschema`` *is* available, the bundled schema is
+        additionally enforced as a deep check. Every failure path raises
+        ``ValueError`` — never ``TypeError`` — even for malformed parsed JSON.
         """
 
         if not self.title:
             raise ValueError("title is required")
+        if self.schema_version != SCHEMA_VERSION:
+            raise ValueError(
+                f"unsupported schema_version: {self.schema_version!r} (expected {SCHEMA_VERSION})"
+            )
+        if not self.event_id:
+            raise ValueError("event_id is required")
+        if not self.timestamp_utc:
+            raise ValueError("timestamp_utc is required")
         if self.hazard_type not in HAZARD_TYPES:
             raise ValueError(f"invalid hazard_type: {self.hazard_type!r}")
         if self.severity not in SEVERITIES:
             raise ValueError(f"invalid severity: {self.severity!r}")
-        if not 0.0 <= float(self.confidence) <= 1.0:
+        if not 0.0 <= _as_float(self.confidence, "confidence") <= 1.0:
             raise ValueError("confidence must be within [0, 1]")
-        if not 1 <= int(self.impact_score) <= 10:
+        if not 1 <= _as_int(self.impact_score, "impact_score") <= 10:
             raise ValueError("impact_score must be within [1, 10]")
-        if self.ttl_hops < 0:
+        if _as_int(self.ttl_hops, "ttl_hops") < 0:
             raise ValueError("ttl_hops must be non-negative")
         if self.trust not in trust_tiers.TRUST_TIERS:
             raise ValueError(f"invalid trust tier: {self.trust!r}")
 
+        # Optional deep validation against the bundled JSON Schema, when present.
         try:
             import jsonschema  # type: ignore
-        except Exception:
+        except ImportError:
             return
-        from .schema import load_schema
+        try:
+            from .schema import load_schema
 
-        jsonschema.validate(self.to_dict(), load_schema())
+            schema = load_schema()
+        except FileNotFoundError:
+            # Schema not bundled (e.g. packaged build); structural checks suffice.
+            return
+        try:
+            jsonschema.validate(self.to_dict(), schema)
+        except jsonschema.ValidationError as exc:
+            raise ValueError(f"schema validation failed: {exc.message}") from exc
 
     # ----- adapter from the existing pipeline ----------------------------
     @classmethod
@@ -188,13 +226,17 @@ class EmergencyEvent:
         origin_node_id: Optional[str] = None,
         hazard_type: Optional[str] = None,
         trust: Optional[str] = None,
+        event_timestamp_utc: Optional[str] = None,
     ) -> "EmergencyEvent":
         """Build an ``EmergencyEvent`` from ``normalize_event_payload`` output.
 
         ``normalized`` is the dict returned by
         ``utils.event_normalization.normalize_event_payload`` (severity,
-        confidence, timestamp_utc, location). All v1.0 fields are preserved; the
-        new platform fields are derived or defaulted.
+        confidence, timestamp_utc, location). The upgrade is lossless: the v1
+        ``timestamp_utc`` (the published/observed time) is preserved verbatim in
+        ``timestamp_utc``. ``event_timestamp_utc`` (when the hazard itself
+        occurred) is left unset unless the caller explicitly supplies one, since
+        the normalized payload carries only the observed time.
         """
 
         location = dict(normalized.get("location") or {})
@@ -220,7 +262,8 @@ class EmergencyEvent:
             severity=str(normalized.get("severity", "low")),
             confidence=float(normalized.get("confidence", 0.0) or 0.0),
             impact_score=max(1, min(10, int(impact_score or 1))),
-            event_timestamp_utc=normalized.get("timestamp_utc"),
+            timestamp_utc=normalized.get("timestamp_utc") or _now_iso(),
+            event_timestamp_utc=event_timestamp_utc,
             location=location,
             summary=snippet or "",
             predictive_outcome=predictive_outcome or "",

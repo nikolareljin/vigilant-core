@@ -37,5 +37,6 @@ print_info "Building VigilantCore executable (PyInstaller)."
 cd "$ROOT_DIR"
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-pyinstaller --onefile --windowed src/main.py --name VigilantCore
+pyinstaller --onefile --windowed src/main.py --name VigilantCore \
+  --add-data "contracts/emergency_event.schema.json:contracts"
 print_success "Build complete. See dist/VigilantCore"

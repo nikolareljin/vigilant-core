@@ -94,10 +94,11 @@ received = EmergencyEvent.from_json(payload)
 
 ## MQTT topics
 
-The MQTT transport (`plugins/builtin/mqtt_transport.py`) publishes schema-valid
-events to:
+A later release adds an MQTT transport plugin that publishes schema-valid events
+to:
 
 - `intel/events/normalized` — every event (issue #57).
 - `intel/events/high_priority` — `high`/`critical` events (issue #58).
 
-Base topic is configurable via the plugin's `base_topic` option.
+The base topic will be configurable via the plugin's `base_topic` option. This
+contract defines the payload shape those topics carry.

@@ -25,11 +25,15 @@ TRUST_TIERS: tuple[str, ...] = (
 # their own tier explicitly when they emit events.
 SOURCE_KIND_TRUST: dict[str, str] = {
     "rss": "known_feed",
-    "emergency_search": "known_feed",
     "news_api": "authenticated_api",
     "google_cse": "open_search",
     "bing_search": "open_search",
     "duckduckgo": "open_search",
+    # emergency_search resolves to open-web (DuckDuckGo) queries via
+    # utils.sources.search_emergency_info, so it is open_search — NOT a curated
+    # feed. Classifying it higher would let open-web content cross the trust
+    # boundary used for automation and prompt-injection defense (issue #70).
+    "emergency_search": "open_search",
 }
 
 DEFAULT_TRUST = "open_search"

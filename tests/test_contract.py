@@ -35,7 +35,11 @@ class EmergencyEventContractTests(unittest.TestCase):
         # v1.0 fields preserved.
         self.assertEqual(event.severity, normalized["severity"])
         self.assertEqual(event.confidence, normalized["confidence"])
-        self.assertEqual(event.event_timestamp_utc, normalized["timestamp_utc"])
+        # The v1 timestamp_utc (published/observed time) is preserved verbatim in
+        # timestamp_utc; event_timestamp_utc stays unset (no hazard-occurrence
+        # time in the normalized payload).
+        self.assertEqual(event.timestamp_utc, normalized["timestamp_utc"])
+        self.assertIsNone(event.event_timestamp_utc)
         self.assertEqual(event.location["zip_code"], "08540")
         # New platform fields derived.
         self.assertEqual(event.schema_version, "2.0")
@@ -71,6 +75,30 @@ class EmergencyEventContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             event2.validate()
 
+    def test_validate_enforces_core_invariants_without_jsonschema(self) -> None:
+        """Structural checks must catch schema-required invariants even when the
+        jsonschema deep check is unavailable/unbundled."""
+
+        # Wrong schema version (e.g. a stale v1 payload).
+        with self.assertRaises(ValueError):
+            EmergencyEvent(title="x", schema_version="1.0").validate()
+        # Empty event_id breaks cross-node dedup.
+        with self.assertRaises(ValueError):
+            EmergencyEvent(title="x", event_id="").validate()
+        # Empty timestamp_utc.
+        with self.assertRaises(ValueError):
+            EmergencyEvent(title="x", timestamp_utc="").validate()
+
+    def test_validate_raises_value_error_not_type_error_on_malformed_input(self) -> None:
+        """Parsing untrusted JSON can yield None/str numerics; validate() must
+        surface ValueError, never TypeError."""
+
+        bad = EmergencyEvent.from_dict(
+            {"title": "t", "confidence": None, "impact_score": "oops"}
+        )
+        with self.assertRaises(ValueError):
+            bad.validate()
+
     def test_from_dict_ignores_unknown_fields(self) -> None:
         event = EmergencyEvent.from_dict(
             {"title": "t", "hazard_type": "fire", "totally_unknown": 1}
@@ -102,6 +130,16 @@ class EmergencyEventContractTests(unittest.TestCase):
         self.assertGreater(trust.rank("signed_node"), trust.rank("open_search"))
         self.assertTrue(trust.is_trusted_for_automation("authenticated_api"))
         self.assertFalse(trust.is_trusted_for_automation("open_search"))
+
+    def test_emergency_search_is_open_search_not_curated(self) -> None:
+        # emergency_search runs open-web queries, so it must not be trusted for
+        # automation as if it were a curated feed (issue #70 boundary).
+        self.assertEqual(trust.for_source_kind("emergency_search"), "open_search")
+        self.assertFalse(trust.is_trusted_for_automation("open_search"))
+        event = EmergencyEvent.from_normalized(
+            normalized=self._normalized(), title="x", source_kind="emergency_search"
+        )
+        self.assertEqual(event.trust, "open_search")
 
     def test_ulid_is_sortable_and_sized(self) -> None:
         a = new_ulid(timestamp_ms=1000)
