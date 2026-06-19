@@ -37,5 +37,12 @@ print_info "Building VigilantCore executable (PyInstaller)."
 cd "$ROOT_DIR"
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-pyinstaller --onefile --windowed src/main.py --name VigilantCore
+# PyInstaller --add-data uses a platform-dependent separator: ';' on Windows
+# (incl. Git Bash), ':' elsewhere.
+case "${OSTYPE:-}" in
+  msys*|cygwin*|win32*) DATA_SEP=";" ;;
+  *) DATA_SEP=":" ;;
+esac
+pyinstaller --onefile --windowed src/main.py --name VigilantCore \
+  --add-data "contracts/emergency_event.schema.json${DATA_SEP}contracts"
 print_success "Build complete. See dist/VigilantCore"
