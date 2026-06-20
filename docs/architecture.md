@@ -58,7 +58,7 @@ Every capability is a plugin of one of four kinds (`plugins/base.py`):
 
 | Kind | Base class | Contract method | Examples |
 |------|-----------|-----------------|----------|
-| Source | `SourcePlugin` | `async poll(ctx) -> [EmergencyEvent]` | RSS, sensors, LoRa-in, MQTT-in |
+| Source | `SourcePlugin` | `async poll(ctx) -> List[EmergencyEvent]` | RSS, sensors, LoRa-in, MQTT-in |
 | Transport | `TransportPlugin` | `send(event)` (+ inbound to bus) | MQTT, LoRa/Meshtastic, BLE, satellite |
 | Device | `DevicePlugin` | `render(event)` | siren, display, GPIO relay, notification |
 | Sink | `SinkPlugin` | `handle(event)` | webhook, shell action, digest, export |

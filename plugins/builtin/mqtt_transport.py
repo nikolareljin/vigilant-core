@@ -2,12 +2,12 @@
 
 Outbound: the canonical ``EmergencyEvent`` JSON is published to
 ``<base_topic>/normalized``; high-priority events (severity high/critical OR
-``impact_score >= 7``) additionally go to ``<base_topic>/high_priority`` — the
-topic split from issues #57/#58. The payload here is the platform's own
-``EmergencyEvent`` contract; projecting it onto the exact ShelfCast wire schema
-is tracked separately in #60. Inbound: when ``subscribe_inbound`` is set, events
-received on ``<base_topic>/ingest`` are republished to the local bus'
-``TOPIC_INGEST`` so they re-enter the pipeline.
+``impact_score >= 7``) additionally go to ``<base_topic>/high_priority``. The
+payload is the platform's own ``EmergencyEvent`` contract; projecting it onto the
+ShelfCast wire schema (and the related topic acceptance criteria) is tracked
+separately in #60. Inbound: when ``subscribe_inbound`` is set, events received on
+``<base_topic>/ingest`` are republished to the local bus's ``TOPIC_INGEST`` so
+they re-enter the pipeline.
 
 ``paho-mqtt`` is imported lazily and a client can be injected via
 ``options['client']`` for tests, so importing this module never requires a broker.
