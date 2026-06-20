@@ -37,6 +37,10 @@ class RssSourcePlugin(SourcePlugin):
                 self.name,
                 type(raw_feeds).__name__,
             )
+            # Record the misconfiguration so health telemetry doesn't stay green.
+            self.health.record_error(
+                f"'feeds' must be a list, got {type(raw_feeds).__name__}"
+            )
             return []
         feeds = [str(f) for f in raw_feeds if f]
         if not feeds:
