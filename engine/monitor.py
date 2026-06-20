@@ -1130,9 +1130,10 @@ class MonitorEngine:
             url=event.url or event.event_id,
             title=event.title,
             snippet=event.summary,
-            # event_timestamp_utc is optional; fall back to the always-present
-            # observed timestamp so the normalizer doesn't reset it to "now".
-            published_at=event.event_timestamp_utc or event.timestamp_utc,
+            # timestamp_utc is the always-present observed/published time;
+            # event_timestamp_utc is the optional *hazard-occurrence* time, so it
+            # would be the wrong value for published_at.
+            published_at=event.timestamp_utc,
             source=source,
             source_kind="plugin",
         )
@@ -1161,7 +1162,10 @@ class MonitorEngine:
                     continue
                 location = event.location or {}
                 source_name = event.sources[0] if event.sources else "mesh"
-                observed = event.event_timestamp_utc or event.timestamp_utc
+                # Observed/published time is timestamp_utc (always present);
+                # event_timestamp_utc is the optional hazard-occurrence time and is
+                # kept in the persisted payload (event.to_dict()).
+                observed = event.timestamp_utc
                 inserted = database.insert_alert(
                     url=url,
                     title=event.title,
