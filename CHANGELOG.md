@@ -2,6 +2,16 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.12.0] - 2026-06-19
+
+### Added
+
+- **Mesh node identity** (`mesh/node.py`): a persistent `node_id` (ULID), label, and role (`hub`/`edge`/`relay`) stored under the platform data dir, so events can record their origin and travel path across nodes.
+- **Store-and-forward queue** (`mesh/forwarding.py`): a SQLite-backed gossip / flood-with-suppression model for offline propagation. Duplicate `event_id`s and looped events (this node already in `seen_nodes`) are suppressed; otherwise the node stamps itself and enqueues a hop-decremented copy. `ttl_hops` bounds flooding (mesh storm protection). The queue and dedup memory persist, so a field node resumes intact after power loss.
+- **Tests** (`tests/test_store_and_forward.py`) covering stable node identity, dedup, loop prevention, TTL bounding, and restart persistence.
+
+This ships the model and reference algorithm; the radios that drive it arrive in a later phase.
+
 ## [0.11.0] - 2026-06-19
 
 ### Added
