@@ -106,30 +106,44 @@ class MonitorEngine:
         self.model_name = self._parser.current_model()
 
         # Platform layer: node identity, plugin kernel, store-and-forward queue.
-        # Wrapped so a field node still monitors even if an optional plugin or
-        # transport dependency is unavailable.
+        # Only stood up when plugins are configured — with none, behavior is
+        # identical to prior releases (no node file, no mesh tables, no queue).
         self.node = None
         self.node_id: Optional[str] = None
         self.registry = None
         self.forwarding: Optional[ForwardingQueue] = None
         self._inbound_lock = threading.Lock()
         self._inbound_events: List[EmergencyEvent] = []
-        try:
-            self.node = load_or_create_node(
-                label=config.node_label, role=config.node_role
-            )
-            self.node_id = self.node.node_id
-            self.registry = build_registry(config, node_id=self.node_id)
-            self.registry.subscribe_ingest(self._buffer_inbound_event)
-            self.forwarding = ForwardingQueue(self.node_id)
-        except Exception:
-            logger.exception("Platform layer init failed; continuing in standalone mode")
+        self._max_inbound = 1000
+        if config.plugins:
+            # Wrapped so a field node still monitors even if an optional plugin or
+            # transport dependency is unavailable.
+            try:
+                self.node = load_or_create_node(
+                    label=config.node_label, role=config.node_role
+                )
+                self.node_id = self.node.node_id
+                self.registry = build_registry(config, node_id=self.node_id)
+                self.registry.subscribe_ingest(self._buffer_inbound_event)
+                self.forwarding = ForwardingQueue(self.node_id)
+            except Exception:
+                logger.exception(
+                    "Platform layer init failed; continuing in standalone mode"
+                )
 
     def _buffer_inbound_event(self, event: EmergencyEvent) -> None:
         """Bus handler for events received from transports (TOPIC_INGEST)."""
 
         with self._inbound_lock:
             self._inbound_events.append(event)
+            # Bound the buffer so a noisy transport or stalled gather loop can't
+            # grow it without limit; drop the oldest on overflow.
+            overflow = len(self._inbound_events) - self._max_inbound
+            if overflow > 0:
+                del self._inbound_events[:overflow]
+                logger.warning(
+                    "Inbound event buffer full; dropped %d oldest event(s)", overflow
+                )
 
     def _drain_inbound_events(self) -> List[EmergencyEvent]:
         with self._inbound_lock:
@@ -460,6 +474,11 @@ class MonitorEngine:
 
     def _matches_location(self, item: AlertItem) -> bool:
         if self.config.relax_location_filter:
+            return True
+        # Plugin/transport events are produced intentionally for this node and
+        # carry their own structured location; don't drop them for lacking
+        # location words/coords in the title/summary text.
+        if item.source_kind == "plugin":
             return True
         keywords = self._location_keywords()
         center = self._get_center_coords()
@@ -1076,10 +1095,11 @@ class MonitorEngine:
         )
 
     async def _gather_plugin_items(self) -> List[AlertItem]:
-        """Pull events from source plugins and buffered inbound transports.
+        """Pull events from *source* plugins (newly observed by this node).
 
-        These re-enter the normal dedup/store pipeline as ``AlertItem``s, so they
-        get the same location filtering and dedup as native fetchers.
+        These re-enter the normal dedup/store pipeline as ``AlertItem``s. Inbound
+        *transport* events are handled separately (see ``_ingest_inbound_events``)
+        because they must keep their original identity, not be re-minted here.
         """
 
         if self.registry is None:
@@ -1089,7 +1109,6 @@ class MonitorEngine:
             events.extend(await self.registry.poll_sources())
         except Exception:
             logger.exception("Source plugin polling failed")
-        events.extend(self._drain_inbound_events())
         return [self._event_to_alert_item(event) for event in events]
 
     @staticmethod
@@ -1099,10 +1118,80 @@ class MonitorEngine:
             url=event.url or event.event_id,
             title=event.title,
             snippet=event.summary,
-            published_at=event.event_timestamp_utc,
+            # event_timestamp_utc is optional; fall back to the always-present
+            # observed timestamp so the normalizer doesn't reset it to "now".
+            published_at=event.event_timestamp_utc or event.timestamp_utc,
             source=source,
             source_kind="plugin",
         )
+
+    def _ingest_inbound_events(self) -> int:
+        """Store and relay inbound transport events, preserving their identity.
+
+        Unlike source-plugin items, inbound mesh/transport events arrive as
+        fully-formed ``EmergencyEvent``s (stable ``event_id``, ``origin_node_id``,
+        ``ttl_hops``, ``seen_nodes``). They must NOT be re-minted, or cross-node
+        dedup/loop/storm protection breaks — so they bypass the AlertItem pipeline.
+        """
+
+        if self.registry is None and self.forwarding is None:
+            return 0
+        stored = 0
+        for event in self._drain_inbound_events():
+            try:
+                # Mesh dedup/loop suppression keyed on the ORIGINAL event_id.
+                if self.forwarding is not None and not self.forwarding.offer(event).accepted:
+                    continue
+                url = event.url or event.event_id
+                if database.alert_exists(url):
+                    continue
+                location = event.location or {}
+                inserted = database.insert_alert(
+                    url=url,
+                    title=event.title,
+                    snippet=event.summary,
+                    published_at=event.event_timestamp_utc or event.timestamp_utc,
+                    source=event.sources[0] if event.sources else "mesh",
+                    source_kind="mesh",
+                    severity=event.severity,
+                    confidence=event.confidence,
+                    event_timestamp_utc=event.event_timestamp_utc or event.timestamp_utc,
+                    impact_score=event.impact_score,
+                    predictive_outcome=event.predictive_outcome,
+                    is_relevant=True,
+                    subject=self.config.subject,
+                    location_name=location.get("name") or self.config.location_name,
+                    location_zip_code=location.get("zip_code") or None,
+                    location_latitude=location.get("latitude"),
+                    location_longitude=location.get("longitude"),
+                    normalized_payload=event.to_dict(),
+                )
+                if inserted:
+                    stored += 1
+                    # Relay the ORIGINAL event (identity preserved) to egress.
+                    if self.registry is not None:
+                        self.registry.publish(event)
+                    if self.on_new_alert:
+                        self.on_new_alert(
+                            {
+                                "url": url,
+                                "title": event.title,
+                                "snippet": event.summary,
+                                "published_at": event.event_timestamp_utc,
+                                "source": event.sources[0] if event.sources else "mesh",
+                                "severity": event.severity,
+                                "confidence": event.confidence,
+                                "event_timestamp_utc": event.timestamp_utc,
+                                "location": location,
+                                "impact_score": event.impact_score,
+                                "predictive_outcome": event.predictive_outcome,
+                                "is_relevant": True,
+                                "created_at": datetime.utcnow().isoformat(),
+                            }
+                        )
+            except Exception:
+                logger.exception("Failed to ingest inbound event %s", event.event_id)
+        return stored
 
     def _publish_platform_event(
         self,
@@ -1208,7 +1297,10 @@ class MonitorEngine:
 
     async def run_once(self) -> int:
         items = await self.gather_items()
-        return await self.process_items(items)
+        new_count = await self.process_items(items)
+        # Inbound transport events take the identity-preserving path.
+        new_count += self._ingest_inbound_events()
+        return new_count
 
     async def run_forever(self) -> None:
         poll_seconds = max(60, self.config.polling_minutes * 60)

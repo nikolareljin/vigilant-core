@@ -206,7 +206,9 @@ def load_config() -> AppConfig:
         context_enable_historical=_coerce_bool(
             data.get("context_enable_historical", True), True
         ),
-        node_label=data.get("node_label"),
+        node_label=(
+            str(data["node_label"]) if data.get("node_label") is not None else None
+        ),
         node_role=str(data.get("node_role", "hub") or "hub"),
         plugins=list(data["plugins"]) if isinstance(data.get("plugins"), list) else [],
     )

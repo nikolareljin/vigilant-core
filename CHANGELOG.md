@@ -14,7 +14,7 @@ All notable changes to VigilantCore will be documented in this file.
 
 ### Changed
 
-- The single `on_new_alert` callback is now one subscriber on the new event bus; with no plugins configured behaviour is identical to prior releases.
+- The platform layer (node identity, plugin registry, store-and-forward queue) is only stood up when plugins are configured; with no plugins configured the engine is unchanged from prior releases (the `on_new_alert` callback is still invoked directly, and no node/mesh state is created).
 
 ## [0.12.0] - 2026-06-19
 
