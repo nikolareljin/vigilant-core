@@ -141,30 +141,38 @@ class MonitorEngine:
                 )
                 self.node_id = self.node.node_id
                 self.registry = build_registry(config, node_id=self.node_id)
-                self.registry.subscribe_ingest(self._buffer_inbound_event)
-                self.forwarding = ForwardingQueue(self.node_id)
+                if self.registry.plugins:
+                    self.registry.subscribe_ingest(self._buffer_inbound_event)
+                    self.forwarding = ForwardingQueue(self.node_id)
+                else:
+                    # No usable plugins loaded (all disabled or failed to load) —
+                    # don't leave node/mesh artifacts behind; run standalone.
+                    logger.info("No plugins loaded; running in standalone mode")
+                    self._teardown_platform_layer(node_file_preexisted)
             except Exception:
                 logger.exception(
                     "Platform layer init failed; continuing in standalone mode"
                 )
-                # Tear down any partially-initialized state so the engine doesn't
-                # publish/ingest through a half-built platform layer.
-                if self.registry is not None:
-                    try:
-                        self.registry.stop_all()
-                    except Exception:
-                        logger.exception("Failed to stop partial registry")
-                # If we just created node.json, remove it so standalone fallback
-                # leaves no persistent artifact behind.
-                if not node_file_preexisted:
-                    try:
-                        node_path().unlink(missing_ok=True)
-                    except OSError:
-                        logger.exception("Failed to remove partial node identity file")
-                self.node = None
-                self.node_id = None
-                self.registry = None
-                self.forwarding = None
+                self._teardown_platform_layer(node_file_preexisted)
+
+    def _teardown_platform_layer(self, node_file_preexisted: bool) -> None:
+        """Revert to standalone mode, leaving no partial platform state/artifacts."""
+
+        if self.registry is not None:
+            try:
+                self.registry.stop_all()
+            except Exception:
+                logger.exception("Failed to stop partial registry")
+        # If we just created node.json, remove it so the fallback leaves nothing.
+        if not node_file_preexisted:
+            try:
+                node_path().unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Failed to remove partial node identity file")
+        self.node = None
+        self.node_id = None
+        self.registry = None
+        self.forwarding = None
 
     def _buffer_inbound_event(self, event: EmergencyEvent) -> None:
         """Bus handler for events received from transports (TOPIC_INGEST)."""

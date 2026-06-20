@@ -277,7 +277,8 @@ def save_config(config: AppConfig) -> None:
         "context_max_historical": config.context_max_historical,
         "context_enable_historical": config.context_enable_historical,
         "node_label": config.node_label,
-        "node_role": config.node_role,
+        # Normalize on write so config.json round-trips to a canonical role.
+        "node_role": _coerce_node_role(config.node_role),
         "plugins": config.plugins,
     }
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
