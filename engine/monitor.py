@@ -1212,7 +1212,9 @@ class MonitorEngine:
                     is_relevant=True,
                     subject=self.config.subject,
                     location_name=location.get("name") or self.config.location_name,
-                    location_zip_code=location.get("zip_code") or None,
+                    location_zip_code=(
+                        str(location["zip_code"]) if location.get("zip_code") else None
+                    ),
                     # Coerce coordinates from an external transport so non-numeric
                     # strings don't land in the REAL columns and leak to /api/alerts.
                     location_latitude=_coerce_coord(location.get("latitude")),
