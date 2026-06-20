@@ -666,7 +666,11 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.polling_input.setText(str(self.config.polling_minutes))
         dialog.insight_refresh_combo.setCurrentText(str(self.config.insight_refresh_minutes or 5))
         if dialog.exec() == QtWidgets.QDialog.Accepted:
-            self.config = dialog.to_config()
+            new_config = dialog.to_config()
+            # The dialog doesn't expose the plugin list; carry it over so saving
+            # settings doesn't wipe a user's configured plugins.
+            new_config.plugins = self.config.plugins
+            self.config = new_config
             save_config(self.config)
             self.stop_monitoring()
             self.refresh_feed()
