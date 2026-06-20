@@ -22,7 +22,7 @@ import pgeocode
 from .parser import ImpactParser, ParsedImpact
 from contracts import EmergencyEvent
 from mesh.forwarding import ForwardingQueue
-from mesh.node import load_or_create_node
+from mesh.node import load_or_create_node, node_path
 from plugins import build_registry
 from utils import database
 from utils.config import AppConfig, config_dir
@@ -118,6 +118,7 @@ class MonitorEngine:
         if config.plugins:
             # Wrapped so a field node still monitors even if an optional plugin or
             # transport dependency is unavailable.
+            node_file_preexisted = node_path().exists()
             try:
                 self.node = load_or_create_node(
                     label=config.node_label, role=config.node_role
@@ -137,6 +138,13 @@ class MonitorEngine:
                         self.registry.stop_all()
                     except Exception:
                         logger.exception("Failed to stop partial registry")
+                # If we just created node.json, remove it so standalone fallback
+                # leaves no persistent artifact behind.
+                if not node_file_preexisted:
+                    try:
+                        node_path().unlink(missing_ok=True)
+                    except OSError:
+                        logger.exception("Failed to remove partial node identity file")
                 self.node = None
                 self.node_id = None
                 self.registry = None
@@ -1168,10 +1176,11 @@ class MonitorEngine:
                     continue
                 location = event.location or {}
                 source_name = event.sources[0] if event.sources else "mesh"
-                # Observed/published time is timestamp_utc (always present);
-                # event_timestamp_utc is the optional hazard-occurrence time and is
-                # kept in the persisted payload (event.to_dict()).
+                # published_at is the observed/published time (always present);
+                # the event_timestamp_utc column carries the hazard-occurrence time
+                # when the inbound event provides one, else the observed time.
                 observed = event.timestamp_utc
+                event_time = event.event_timestamp_utc or event.timestamp_utc
                 inserted = database.insert_alert(
                     url=url,
                     title=event.title,
@@ -1181,7 +1190,7 @@ class MonitorEngine:
                     source_kind="mesh",
                     severity=event.severity,
                     confidence=event.confidence,
-                    event_timestamp_utc=observed,
+                    event_timestamp_utc=event_time,
                     impact_score=event.impact_score,
                     predictive_outcome=event.predictive_outcome,
                     is_relevant=True,
@@ -1207,7 +1216,7 @@ class MonitorEngine:
                                 "source": source_name,
                                 "severity": event.severity,
                                 "confidence": event.confidence,
-                                "event_timestamp_utc": observed,
+                                "event_timestamp_utc": event_time,
                                 "location": location,
                                 "impact_score": event.impact_score,
                                 "predictive_outcome": event.predictive_outcome,

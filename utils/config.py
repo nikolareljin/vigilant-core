@@ -209,7 +209,7 @@ def load_config() -> AppConfig:
         node_label=(
             str(data["node_label"]) if data.get("node_label") is not None else None
         ),
-        node_role=str(data.get("node_role", "hub") or "hub"),
+        node_role=str(data.get("node_role", "hub") or "hub").strip().lower(),
         plugins=list(data["plugins"]) if isinstance(data.get("plugins"), list) else [],
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")

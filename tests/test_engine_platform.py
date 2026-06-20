@@ -21,6 +21,8 @@ def _patches(tmp: Path) -> ExitStack:
         "utils.config.data_dir",
         "utils.database.data_dir",
         "mesh.node.data_dir",
+        # engine.monitor imports config_dir directly, so patch that binding too.
+        "engine.monitor.config_dir",
     ):
         stack.enter_context(patch(target, return_value=tmp))
     return stack
