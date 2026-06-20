@@ -50,6 +50,19 @@ class NodeIdentityTests(unittest.TestCase):
             )
             self.assertEqual(load_or_create_node(base=base).role, "hub")
 
+    def test_loaded_invalid_node_id_is_recreated(self) -> None:
+        import json
+        from mesh.node import node_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            node_path(base).write_text(
+                json.dumps({"node_id": "not-a-ulid", "role": "hub"}), encoding="utf-8"
+            )
+            node = load_or_create_node(base=base)
+            self.assertNotEqual(node.node_id, "not-a-ulid")
+            self.assertEqual(len(node.node_id), 26)
+
     def test_write_is_atomic_no_tmp_left(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

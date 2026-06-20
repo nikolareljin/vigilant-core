@@ -9,6 +9,7 @@ dedup and loop-prevention have nothing to key on.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,8 @@ from utils.config import data_dir
 
 NODE_FILE = "node.json"
 VALID_ROLES = ("hub", "edge", "relay")
+# A ULID is 26 Crockford base32 chars (excludes I, L, O, U); accept either case.
+_ULID_RE = re.compile(r"^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$", re.IGNORECASE)
 
 
 @dataclass
@@ -50,9 +53,13 @@ def load_or_create_node(
     if path.exists():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            node_id = str(data["node_id"])
+            if not _ULID_RE.match(node_id):
+                # Corrupt/hand-edited id: recreate rather than reuse an invalid one.
+                raise ValueError(f"invalid node_id: {node_id!r}")
             loaded_role = str(data.get("role") or "hub")
             return Node(
-                node_id=str(data["node_id"]),
+                node_id=node_id,
                 label=str(data.get("label") or data["node_id"]),
                 # Validate the persisted role too, so a hand-edited/corrupted file
                 # can't leave the node with an unsupported role.

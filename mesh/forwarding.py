@@ -169,12 +169,14 @@ class ForwardingQueue:
             )
             for row in cur.fetchall():
                 try:
-                    # Trusted local storage we wrote ourselves: decode leniently so
-                    # the original trust tier/signature is preserved for relay
-                    # (strict decode would clamp it as untrusted inbound).
-                    events.append(
-                        EmergencyEvent.from_json(row["payload_json"], strict=False)
-                    )
+                    # Decode leniently so the original trust tier/signature is
+                    # preserved for relay (strict decode would clamp it as
+                    # untrusted inbound), but still validate() the structure so a
+                    # corrupted/tampered on-disk row isn't forwarded as a valid
+                    # event.
+                    event = EmergencyEvent.from_json(row["payload_json"], strict=False)
+                    event.validate()
+                    events.append(event)
                 except (KeyError, ValueError, json.JSONDecodeError, TypeError):
                     bad_ids.append(row["event_id"])
             for event_id in bad_ids:
