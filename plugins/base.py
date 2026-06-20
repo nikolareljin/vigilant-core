@@ -170,7 +170,11 @@ class EventBus:
 
     def subscribe(self, topic: str, handler: Subscriber) -> None:
         with self._lock:
-            self._subs.setdefault(topic, []).append(handler)
+            handlers = self._subs.setdefault(topic, [])
+            # Idempotent: subscribing the same handler twice (e.g. a repeated
+            # subscribe_ingest on config reload) must not double-deliver.
+            if handler not in handlers:
+                handlers.append(handler)
 
     def unsubscribe(self, topic: str, handler: Subscriber) -> None:
         with self._lock:
