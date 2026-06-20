@@ -1121,7 +1121,13 @@ class MonitorEngine:
             events.extend(await self.registry.poll_sources())
         except Exception:
             logger.exception("Source plugin polling failed")
-        return [self._event_to_alert_item(event) for event in events]
+        # Filter out anything that isn't an EmergencyEvent (a misbehaving plugin
+        # could return None/other), so one bad element can't abort gather_items().
+        return [
+            self._event_to_alert_item(event)
+            for event in events
+            if isinstance(event, EmergencyEvent)
+        ]
 
     @staticmethod
     def _event_to_alert_item(event: EmergencyEvent) -> AlertItem:
@@ -1336,3 +1342,10 @@ class MonitorEngine:
 
     def stop(self) -> None:
         self._stop_event.set()
+        # Tear down plugin resources (e.g. MQTT loop threads) so they don't leak
+        # across a stop/restart of monitoring.
+        if self.registry is not None:
+            try:
+                self.registry.stop_all()
+            except Exception:
+                logger.exception("Failed to stop plugin registry")
