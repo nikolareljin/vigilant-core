@@ -1146,16 +1146,18 @@ class MonitorEngine:
                 if database.alert_exists(url):
                     continue
                 location = event.location or {}
+                source_name = event.sources[0] if event.sources else "mesh"
+                observed = event.event_timestamp_utc or event.timestamp_utc
                 inserted = database.insert_alert(
                     url=url,
                     title=event.title,
                     snippet=event.summary,
-                    published_at=event.event_timestamp_utc or event.timestamp_utc,
-                    source=event.sources[0] if event.sources else "mesh",
+                    published_at=observed,
+                    source=source_name,
                     source_kind="mesh",
                     severity=event.severity,
                     confidence=event.confidence,
-                    event_timestamp_utc=event.event_timestamp_utc or event.timestamp_utc,
+                    event_timestamp_utc=observed,
                     impact_score=event.impact_score,
                     predictive_outcome=event.predictive_outcome,
                     is_relevant=True,
@@ -1177,11 +1179,11 @@ class MonitorEngine:
                                 "url": url,
                                 "title": event.title,
                                 "snippet": event.summary,
-                                "published_at": event.event_timestamp_utc,
-                                "source": event.sources[0] if event.sources else "mesh",
+                                "published_at": observed,
+                                "source": source_name,
                                 "severity": event.severity,
                                 "confidence": event.confidence,
-                                "event_timestamp_utc": event.timestamp_utc,
+                                "event_timestamp_utc": observed,
                                 "location": location,
                                 "impact_score": event.impact_score,
                                 "predictive_outcome": event.predictive_outcome,
