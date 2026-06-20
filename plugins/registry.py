@@ -50,12 +50,22 @@ class PluginRegistry:
         # If the registry is already running, start and wire the late arrival now
         # so egress plugins actually receive events.
         if self._started:
-            try:
-                plugin.start(self._context_for(plugin))
-                self._wire_egress(plugin)
-            except Exception as exc:
-                logger.exception("Failed to start plugin %s", plugin.name)
-                plugin.health.record_error(f"start failed: {exc}")
+            self._start_and_wire(plugin)
+
+    def _start_and_wire(self, plugin: Plugin) -> None:
+        """Start a plugin then wire its egress, recording which step failed."""
+
+        try:
+            plugin.start(self._context_for(plugin))
+        except Exception as exc:
+            logger.exception("Failed to start plugin %s", plugin.name)
+            plugin.health.record_error(f"start failed: {exc}")
+            return
+        try:
+            self._wire_egress(plugin)
+        except Exception as exc:
+            logger.exception("Failed to wire plugin %s", plugin.name)
+            plugin.health.record_error(f"wiring failed: {exc}")
 
     @property
     def plugins(self) -> List[Plugin]:
@@ -76,12 +86,7 @@ class PluginRegistry:
         if self._started:
             return
         for plugin in self._plugins:
-            try:
-                plugin.start(self._context_for(plugin))
-                self._wire_egress(plugin)
-            except Exception as exc:
-                logger.exception("Failed to start plugin %s", plugin.name)
-                plugin.health.record_error(f"start failed: {exc}")
+            self._start_and_wire(plugin)
         self._started = True
 
     def _subscribe_egress(self, topic: str, handler: Callable[[EmergencyEvent], None]) -> None:
