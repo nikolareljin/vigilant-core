@@ -9,7 +9,9 @@ dedup and loop-prevention have nothing to key on.
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -82,12 +84,34 @@ def load_or_create_node(
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    """Write ``text`` to ``path`` atomically (temp file in the same dir + replace),
-    so a crash/power-loss can't leave a half-written identity file."""
+    """Write ``text`` to ``path`` durably and atomically.
 
-    tmp = path.with_name(f"{path.name}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
+    Uses a unique temp file in the same directory (so concurrent writers don't
+    clobber a shared temp path), fsyncs the file before the rename, then fsyncs
+    the directory so the rename survives power loss."""
+
+    directory = path.parent
+    fd, tmp_name = tempfile.mkstemp(dir=str(directory), prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp.replace(path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    # Best-effort directory fsync so the rename is durable (unsupported on some
+    # platforms, e.g. Windows).
+    try:
+        dir_fd = os.open(str(directory), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except (OSError, AttributeError):  # pragma: no cover - platform dependent
+        pass
 
 
 def _now_iso() -> str:
