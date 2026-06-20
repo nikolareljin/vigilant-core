@@ -75,6 +75,20 @@ class EnginePlatformTests(unittest.TestCase):
                 self.assertEqual(payload["event_id"], original_id)
                 self.assertEqual(payload["origin_node_id"], "PEER-NODE")
 
+    def test_node_fields_round_trip_and_role_validated(self) -> None:
+        from utils.config import load_config, save_config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("utils.config.config_dir", return_value=Path(tmp)):
+                save_config(AppConfig(node_label="ridge-1", node_role="edge"))
+                loaded = load_config()
+                self.assertEqual(loaded.node_label, "ridge-1")
+                self.assertEqual(loaded.node_role, "edge")
+            # An invalid/odd-cased role is normalized + validated to a real role.
+            with patch("utils.config.config_dir", return_value=Path(tmp)):
+                save_config(AppConfig(node_role="bogus"))
+                self.assertEqual(load_config().node_role, "hub")
+
     def test_inbound_buffer_is_bounded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with _patches(Path(tmp)):

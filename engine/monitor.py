@@ -63,6 +63,17 @@ SOURCE_HEALTH_CATALOG = {
 }
 
 
+def _coerce_coord(value: object) -> Optional[float]:
+    """Coerce a coordinate to float, or None — keeps non-numeric strings from an
+    external transport out of the REAL latitude/longitude columns."""
+    if value is None:
+        return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass
 class AlertItem:
     url: str
@@ -118,8 +129,11 @@ class MonitorEngine:
         if config.plugins:
             # Wrapped so a field node still monitors even if an optional plugin or
             # transport dependency is unavailable.
-            node_file_preexisted = node_path().exists()
+            # Default True so the fallback never deletes a file we didn't create;
+            # the real check runs inside the try (node_path() can raise).
+            node_file_preexisted = True
             try:
+                node_file_preexisted = node_path().exists()
                 self.node = load_or_create_node(
                     label=config.node_label, role=config.node_role
                 )
@@ -1197,8 +1211,10 @@ class MonitorEngine:
                     subject=self.config.subject,
                     location_name=location.get("name") or self.config.location_name,
                     location_zip_code=location.get("zip_code") or None,
-                    location_latitude=location.get("latitude"),
-                    location_longitude=location.get("longitude"),
+                    # Coerce coordinates from an external transport so non-numeric
+                    # strings don't land in the REAL columns and leak to /api/alerts.
+                    location_latitude=_coerce_coord(location.get("latitude")),
+                    location_longitude=_coerce_coord(location.get("longitude")),
                     normalized_payload=event.to_dict(),
                 )
                 if inserted:

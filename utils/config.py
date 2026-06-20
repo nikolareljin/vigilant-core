@@ -123,6 +123,15 @@ def _coerce_int(value: object, default: int) -> int:
         return default
 
 
+_VALID_NODE_ROLES = ("hub", "edge", "relay")
+
+
+def _coerce_node_role(value: object) -> str:
+    """Normalize and validate a mesh node role, defaulting to ``hub``."""
+    role = str(value if value is not None else "hub").strip().lower()
+    return role if role in _VALID_NODE_ROLES else "hub"
+
+
 def _coerce_bool(value: object, default: bool) -> bool:
     """Parse a config value as bool, recognizing common JSON string forms.
 
@@ -209,7 +218,7 @@ def load_config() -> AppConfig:
         node_label=(
             str(data["node_label"]) if data.get("node_label") is not None else None
         ),
-        node_role=(str(data.get("node_role", "hub") or "hub").strip().lower() or "hub"),
+        node_role=_coerce_node_role(data.get("node_role")),
         plugins=list(data["plugins"]) if isinstance(data.get("plugins"), list) else [],
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
