@@ -89,6 +89,37 @@ class EnginePlatformTests(unittest.TestCase):
                 save_config(AppConfig(node_role="bogus"))
                 self.assertEqual(load_config().node_role, "hub")
 
+    def test_native_alert_published_to_mesh_and_registry(self) -> None:
+        import asyncio
+
+        from engine.monitor import AlertItem
+        from engine.parser import ParsedImpact
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with _patches(Path(tmp)):
+                database.init_db()
+                engine = self._engine(
+                    [{"type": "notify_device", "name": "siren",
+                      "options": {"min_severity": "low", "desktop": False}}]
+                )
+
+                class _Parser:
+                    async def parse_async(self, title, snippet):
+                        return ParsedImpact(8, "evacuate", True, snippet)
+
+                engine._parser = _Parser()
+                item = AlertItem(
+                    url="http://native/fire-1", title="Native wildfire",
+                    snippet="spreading", published_at=None, source="CalFire",
+                    source_kind="rss",
+                )
+                inserted = asyncio.run(engine.process_items([item]))
+                self.assertEqual(inserted, 1)
+                # Enqueued for forwarding and delivered to the egress device.
+                self.assertGreaterEqual(engine.forwarding.pending_count(), 1)
+                siren = next(p for p in engine.registry.plugins if p.name == "siren")
+                self.assertGreaterEqual(len(siren.rendered), 1)
+
     def test_inbound_buffer_is_bounded(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with _patches(Path(tmp)):

@@ -1178,12 +1178,14 @@ class MonitorEngine:
         if self.registry is None and self.forwarding is None:
             return 0
         stored = 0
+        existing_url_cache: Dict[str, bool] = {}
         for event in self._drain_inbound_events():
             try:
                 # Skip events we already hold locally before touching the mesh
                 # queue, so an already-stored alert isn't re-enqueued for forward.
+                # Cached so repeated duplicates don't reopen a connection each time.
                 url = event.url or event.event_id
-                if database.alert_exists(url):
+                if self._url_exists_cached(url, existing_url_cache):
                     continue
                 # Mesh dedup/loop suppression keyed on the ORIGINAL event_id.
                 if self.forwarding is not None and not self.forwarding.offer(event).accepted:
