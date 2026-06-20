@@ -6,8 +6,15 @@ on:
       - main
       - master
 
+# The reusable auto-tag-release workflow declares workflow-level permissions
+# (pull-requests: read for PR-based version detection, actions: write for the
+# dispatch job). A reusable workflow cannot request permissions the caller does
+# not grant, so omitting these makes the call fail with startup_failure and no
+# release tag is created. Mirror the canonical ci-helpers caller.
 permissions:
   contents: write
+  pull-requests: read
+  actions: write
 
 jobs:
   tag:
