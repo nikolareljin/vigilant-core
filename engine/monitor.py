@@ -126,6 +126,8 @@ class MonitorEngine:
         self._inbound_lock = threading.Lock()
         self._inbound_events: List[EmergencyEvent] = []
         self._max_inbound = 1000
+        self._last_prune = perf_counter()
+        self._prune_interval_seconds = 3600.0
         if config.plugins:
             # Wrapped so a field node still monitors even if an optional plugin or
             # transport dependency is unavailable.
@@ -1187,8 +1189,15 @@ class MonitorEngine:
                 url = event.url or event.event_id
                 if self._url_exists_cached(url, existing_url_cache):
                     continue
-                # Mesh dedup/loop suppression keyed on the ORIGINAL event_id.
-                if self.forwarding is not None and not self.forwarding.offer(event).accepted:
+                # Read-only mesh dedup/loop check BEFORE storing — looped or
+                # already-seen events are skipped without side effects. The
+                # state-mutating offer() (mark-seen + enqueue forward) only runs
+                # after a successful durable insert below, so a failed insert
+                # (e.g. transient lock) can't lose the event by pre-marking it seen.
+                if self.forwarding is not None and (
+                    self.node_id in event.seen_nodes
+                    or self.forwarding.has_seen(event.event_id)
+                ):
                     continue
                 location = event.location or {}
                 source_name = event.sources[0] if event.sources else "mesh"
@@ -1223,6 +1232,11 @@ class MonitorEngine:
                 )
                 if inserted:
                     stored += 1
+                    existing_url_cache[url] = True
+                    # Now that the event is durably stored, record it on the mesh
+                    # (mark-seen + enqueue a forward hop).
+                    if self.forwarding is not None:
+                        self.forwarding.offer(event)
                     # Relay the ORIGINAL event (identity preserved) to egress.
                     if self.registry is not None:
                         self.registry.publish(event)
@@ -1364,13 +1378,18 @@ class MonitorEngine:
                 await self.run_once()
             except Exception:
                 pass
-            # Bound the store-and-forward dedup ledger so it can't grow without
-            # limit on a long-lived node (the only caller of prune()).
+            # Bound the dedup ledger so it can't grow without limit, but throttle
+            # to at most hourly — prune only removes rows past a long retention
+            # window, so running it every poll cycle is needless DB churn/flash
+            # wear on long-lived edge devices.
             if self.forwarding is not None:
-                try:
-                    self.forwarding.prune()
-                except Exception:
-                    logger.exception("Failed to prune mesh store-and-forward tables")
+                now = perf_counter()
+                if now - self._last_prune >= self._prune_interval_seconds:
+                    self._last_prune = now
+                    try:
+                        self.forwarding.prune()
+                    except Exception:
+                        logger.exception("Failed to prune mesh store-and-forward tables")
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=poll_seconds)
             except asyncio.TimeoutError:
