@@ -130,6 +130,17 @@ class MonitorEngine:
                 logger.exception(
                     "Platform layer init failed; continuing in standalone mode"
                 )
+                # Tear down any partially-initialized state so the engine doesn't
+                # publish/ingest through a half-built platform layer.
+                if self.registry is not None:
+                    try:
+                        self.registry.stop_all()
+                    except Exception:
+                        logger.exception("Failed to stop partial registry")
+                self.node = None
+                self.node_id = None
+                self.registry = None
+                self.forwarding = None
 
     def _buffer_inbound_event(self, event: EmergencyEvent) -> None:
         """Bus handler for events received from transports (TOPIC_INGEST)."""
@@ -475,9 +486,10 @@ class MonitorEngine:
     def _matches_location(self, item: AlertItem) -> bool:
         if self.config.relax_location_filter:
             return True
-        # Plugin/transport events are produced intentionally for this node and
-        # carry their own structured location; don't drop them for lacking
-        # location words/coords in the title/summary text.
+        # Source-plugin items are produced intentionally for this node's
+        # configured subject/area, so don't drop them just because the title/
+        # summary text lacks location words/coords (the text-based filter below
+        # is meant for broad web/RSS results, not targeted plugin output).
         if item.source_kind == "plugin":
             return True
         keywords = self._location_keywords()
