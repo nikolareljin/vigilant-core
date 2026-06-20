@@ -162,6 +162,27 @@ class StoreAndForwardTests(unittest.TestCase):
             # The corrupt row is marked forwarded so it can't wedge the queue.
             self.assertEqual(queue.pending_count(), 0)
 
+    def test_prune_removes_old_dedup_entries(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "mesh.db")
+
+            def connect():
+                return sqlite3.connect(db)
+
+            queue = ForwardingQueue("NODE-A", connect=connect)
+            # An old seen-event from 2020 plus a fresh one from offer().
+            with connect() as conn:
+                conn.execute(
+                    "INSERT INTO mesh_seen_events (event_id, first_seen_utc) VALUES (?, ?)",
+                    ("OLD", "2020-01-01T00:00:00Z"),
+                )
+            queue.offer(_event(ttl=1))
+            removed = queue.prune(retention_days=30)
+            self.assertEqual(removed, 1)  # only the 2020 entry
+            self.assertFalse(queue.has_seen("OLD"))
+
     def test_pending_drops_incomplete_payload_instead_of_minting(self) -> None:
         import json
         import sqlite3

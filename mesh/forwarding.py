@@ -24,7 +24,7 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, List
 
 from contracts import EmergencyEvent
@@ -85,6 +85,11 @@ class ForwardingQueue:
                     first_seen_utc TEXT NOT NULL
                 )
                 """
+            )
+            # Supports pruning the dedup ledger by age (see prune()).
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_mesh_seen_first_seen "
+                "ON mesh_seen_events(first_seen_utc)"
             )
             conn.execute(
                 """
@@ -191,6 +196,10 @@ class ForwardingQueue:
                         raise ValueError("missing required field(s)")
                     event = EmergencyEvent.from_dict(data, strict=False)
                     event.validate()
+                    if event.event_id != row["event_id"]:
+                        # A diverging id would make mark_forwarded(event.event_id)
+                        # miss this row, wedging the queue — treat as undecodable.
+                        raise ValueError("event_id does not match queue row")
                     events.append(event)
                 except (KeyError, ValueError, json.JSONDecodeError, TypeError):
                     bad_ids.append(row["event_id"])
@@ -220,3 +229,26 @@ class ForwardingQueue:
                 "SELECT COUNT(*) AS c FROM mesh_forward_queue WHERE forwarded = 0"
             )
             return int(cur.fetchone()["c"])
+
+    def prune(self, retention_days: float = 30.0) -> int:
+        """Delete dedup-ledger entries and already-forwarded queue rows older than
+        ``retention_days``, returning the number of rows removed.
+
+        The dedup ledger (``mesh_seen_events``) otherwise grows without bound on a
+        long-lived node; hosts call this periodically to cap it. Events older than
+        the window can be re-accepted if they reappear, which is the intended
+        trade-off for bounded storage.
+        """
+
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=retention_days)
+        ).isoformat(timespec="seconds").replace("+00:00", "Z")
+        with self._open() as conn:
+            seen = conn.execute(
+                "DELETE FROM mesh_seen_events WHERE first_seen_utc < ?", (cutoff,)
+            ).rowcount
+            queued = conn.execute(
+                "DELETE FROM mesh_forward_queue WHERE forwarded = 1 AND enqueued_utc < ?",
+                (cutoff,),
+            ).rowcount
+        return int(seen or 0) + int(queued or 0)
