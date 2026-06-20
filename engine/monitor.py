@@ -1151,11 +1151,13 @@ class MonitorEngine:
         stored = 0
         for event in self._drain_inbound_events():
             try:
-                # Mesh dedup/loop suppression keyed on the ORIGINAL event_id.
-                if self.forwarding is not None and not self.forwarding.offer(event).accepted:
-                    continue
+                # Skip events we already hold locally before touching the mesh
+                # queue, so an already-stored alert isn't re-enqueued for forward.
                 url = event.url or event.event_id
                 if database.alert_exists(url):
+                    continue
+                # Mesh dedup/loop suppression keyed on the ORIGINAL event_id.
+                if self.forwarding is not None and not self.forwarding.offer(event).accepted:
                     continue
                 location = event.location or {}
                 source_name = event.sources[0] if event.sources else "mesh"
