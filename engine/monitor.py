@@ -1344,6 +1344,13 @@ class MonitorEngine:
                 await self.run_once()
             except Exception:
                 pass
+            # Bound the store-and-forward dedup ledger so it can't grow without
+            # limit on a long-lived node (the only caller of prune()).
+            if self.forwarding is not None:
+                try:
+                    self.forwarding.prune()
+                except Exception:
+                    logger.exception("Failed to prune mesh store-and-forward tables")
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=poll_seconds)
             except asyncio.TimeoutError:
