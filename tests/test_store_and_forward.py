@@ -67,7 +67,10 @@ class NodeIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             load_or_create_node(base=base)
-            self.assertFalse(list(base.glob("*.tmp")))
+            # Match dotfiles too: the temp file is created with a leading dot,
+            # which glob("*.tmp") would miss.
+            leftovers = [p for p in base.iterdir() if p.name.endswith(".tmp")]
+            self.assertEqual(leftovers, [])
 
 
 class StoreAndForwardTests(unittest.TestCase):

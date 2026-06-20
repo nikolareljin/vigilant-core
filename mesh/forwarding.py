@@ -129,6 +129,7 @@ class ForwardingQueue:
             return OfferResult("looped", False)
 
         now = _now_iso()
+        will_forward = event.ttl_hops > 0
         with self._open() as conn:
             try:
                 conn.execute(
@@ -137,10 +138,11 @@ class ForwardingQueue:
                 )
             except sqlite3.IntegrityError:
                 return OfferResult("duplicate", False)
-            event.mark_seen(self.node_id)
-            will_forward = event.ttl_hops > 0
             if will_forward:
+                # Stamp a COPY (not the caller's event) so a rollback can't leave
+                # this node spuriously in the original's seen_nodes.
                 forward_copy = event.decremented()
+                forward_copy.mark_seen(self.node_id)
                 conn.execute(
                     """
                     INSERT OR IGNORE INTO mesh_forward_queue
@@ -154,6 +156,8 @@ class ForwardingQueue:
                         now,
                     ),
                 )
+        # Only mutate the caller's event once the transaction has committed.
+        event.mark_seen(self.node_id)
         return OfferResult("new", will_forward)
 
     # ----- queue draining (transports call these) ------------------------
