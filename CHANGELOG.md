@@ -2,6 +2,21 @@
 
 All notable changes to VigilantCore will be documented in this file.
 
+## [0.13.0] - 2026-06-19
+
+### Added
+
+- **Platform integration in the monitoring engine** (`engine/monitor.py`), stood up only when plugins are configured: `MonitorEngine` carries a node identity, a plugin registry, and a store-and-forward queue, wired in additively:
+  - `gather_items()` additionally pulls events from *source* plugins, feeding them through the same dedup/location pipeline as native fetchers.
+  - `run_once()` ingests inbound *transport* events separately (`_ingest_inbound_events()`), preserving their original `event_id`/`origin_node_id`/mesh state instead of re-minting them, so cross-node dedup/loop/storm protection holds.
+  - `process_items()` emits each newly stored native alert as an `EmergencyEvent` to the mesh queue and to egress plugins (transports/devices/sinks).
+  - The platform layer degrades gracefully: if an optional plugin or transport dependency is unavailable, monitoring continues unchanged.
+- **Config** (`utils/config.py`): `AppConfig` gains a `node` identity (`node_label`, `node_role`) and a `plugins` list (`{type, name, enabled, options}`), persisted via the existing load/save path.
+
+### Changed
+
+- The platform layer (node identity, plugin registry, store-and-forward queue) is only stood up when plugins are configured; with no plugins configured the engine is unchanged from prior releases (the `on_new_alert` callback is still invoked directly, and no node/mesh state is created).
+
 ## [0.12.0] - 2026-06-19
 
 ### Added

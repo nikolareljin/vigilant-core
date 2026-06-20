@@ -19,7 +19,11 @@ import feedparser
 import httpx
 import pgeocode
 
-from .parser import ImpactParser
+from .parser import ImpactParser, ParsedImpact
+from contracts import EmergencyEvent
+from mesh.forwarding import ForwardingQueue
+from mesh.node import load_or_create_node, node_path
+from plugins import build_registry
 from utils import database
 from utils.config import AppConfig, config_dir
 from utils.event_deduplication import deduplicate_events
@@ -57,6 +61,17 @@ SOURCE_HEALTH_CATALOG = {
     "duckduckgo": "DuckDuckGo",
     "emergency_search": "Emergency Search",
 }
+
+
+def _coerce_coord(value: object) -> Optional[float]:
+    """Coerce a coordinate to float, or None — keeps non-numeric strings from an
+    external transport out of the REAL latitude/longitude columns."""
+    if value is None:
+        return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 @dataclass
@@ -100,6 +115,89 @@ class MonitorEngine:
             prefer_light_model=config.prefer_light_model,
         )
         self.model_name = self._parser.current_model()
+
+        # Platform layer: node identity, plugin kernel, store-and-forward queue.
+        # Only stood up when plugins are configured — with none, behavior is
+        # identical to prior releases (no node file, no mesh tables, no queue).
+        self.node = None
+        self.node_id: Optional[str] = None
+        self.registry = None
+        self.forwarding: Optional[ForwardingQueue] = None
+        self._inbound_lock = threading.Lock()
+        self._inbound_events: List[EmergencyEvent] = []
+        self._max_inbound = 1000
+        self._last_prune = perf_counter()
+        self._prune_interval_seconds = 3600.0
+        if config.plugins:
+            # Wrapped so a field node still monitors even if an optional plugin or
+            # transport dependency is unavailable.
+            # Default True so the fallback never deletes a file we didn't create;
+            # the real check runs inside the try (node_path() can raise).
+            node_file_preexisted = True
+            try:
+                node_file_preexisted = node_path().exists()
+                self.node = load_or_create_node(
+                    label=config.node_label, role=config.node_role
+                )
+                self.node_id = self.node.node_id
+                self.registry = build_registry(config, node_id=self.node_id)
+                if self.registry.plugins:
+                    self.registry.subscribe_ingest(self._buffer_inbound_event)
+                    self.forwarding = ForwardingQueue(self.node_id)
+                else:
+                    # No usable plugins loaded (all disabled or failed to load) —
+                    # don't leave node/mesh artifacts behind; run standalone.
+                    logger.info("No plugins loaded; running in standalone mode")
+                    self._teardown_platform_layer(node_file_preexisted)
+            except Exception:
+                logger.exception(
+                    "Platform layer init failed; continuing in standalone mode"
+                )
+                self._teardown_platform_layer(node_file_preexisted)
+
+    def _teardown_platform_layer(self, node_file_preexisted: bool) -> None:
+        """Revert to standalone mode, leaving no partial platform state/artifacts."""
+
+        if self.registry is not None:
+            try:
+                self.registry.stop_all()
+            except Exception:
+                logger.exception("Failed to stop partial registry")
+        # If we just created node.json, remove it so the fallback leaves nothing.
+        if not node_file_preexisted:
+            try:
+                node_path().unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Failed to remove partial node identity file")
+        self.node = None
+        self.node_id = None
+        self.registry = None
+        self.forwarding = None
+
+    def _buffer_inbound_event(self, event: EmergencyEvent) -> None:
+        """Bus handler for events received from transports (TOPIC_INGEST)."""
+
+        with self._inbound_lock:
+            self._inbound_events.append(event)
+            # Bound the buffer so a noisy transport or stalled gather loop can't
+            # grow it without limit; drop the oldest on overflow.
+            overflow = len(self._inbound_events) - self._max_inbound
+            if overflow > 0:
+                del self._inbound_events[:overflow]
+                logger.warning(
+                    "Inbound event buffer full; dropped %d oldest event(s)", overflow
+                )
+
+    def _drain_inbound_events(self) -> List[EmergencyEvent]:
+        with self._inbound_lock:
+            drained = self._inbound_events
+            self._inbound_events = []
+        return drained
+
+    def get_plugin_health(self) -> List[Dict[str, object]]:
+        """Plugin health snapshots for the dashboard (empty when no plugins)."""
+
+        return self.registry.health() if self.registry else []
 
     def _is_source_enabled(self, source_key: str) -> bool:
         if source_key == "rss":
@@ -419,6 +517,12 @@ class MonitorEngine:
 
     def _matches_location(self, item: AlertItem) -> bool:
         if self.config.relax_location_filter:
+            return True
+        # Source-plugin items are produced intentionally for this node's
+        # configured subject/area, so don't drop them just because the title/
+        # summary text lacks location words/coords (the text-based filter below
+        # is meant for broad web/RSS results, not targeted plugin output).
+        if item.source_kind == "plugin":
             return True
         keywords = self._location_keywords()
         center = self._get_center_coords()
@@ -967,6 +1071,9 @@ class MonitorEngine:
             combined = []
             for group in results:
                 combined.extend(group)
+        plugin_items = await self._gather_plugin_items()
+        if plugin_items:
+            combined.extend(plugin_items)
         logger.info("Fetched %d raw items before filtering", len(combined))
         seen = set()
         filtered_items = []
@@ -1030,6 +1137,169 @@ class MonitorEngine:
             "https://news.google.com/rss/search"
             f"?q={query}&hl=en-US&gl=US&ceid=US:en"
         )
+
+    async def _gather_plugin_items(self) -> List[AlertItem]:
+        """Pull events from *source* plugins (newly observed by this node).
+
+        These re-enter the normal dedup/store pipeline as ``AlertItem``s. Inbound
+        *transport* events are handled separately (see ``_ingest_inbound_events``)
+        because they must keep their original identity, not be re-minted here.
+        """
+
+        if self.registry is None:
+            return []
+        events: List[EmergencyEvent] = []
+        try:
+            events.extend(await self.registry.poll_sources())
+        except Exception:
+            logger.exception("Source plugin polling failed")
+        # Filter out anything that isn't an EmergencyEvent (a misbehaving plugin
+        # could return None/other), so one bad element can't abort gather_items().
+        return [
+            self._event_to_alert_item(event)
+            for event in events
+            if isinstance(event, EmergencyEvent)
+        ]
+
+    @staticmethod
+    def _event_to_alert_item(event: EmergencyEvent) -> AlertItem:
+        source = event.sources[0] if event.sources else "plugin"
+        return AlertItem(
+            url=event.url or event.event_id,
+            title=event.title,
+            snippet=event.summary,
+            # timestamp_utc is the always-present observed/published time;
+            # event_timestamp_utc is the optional *hazard-occurrence* time, so it
+            # would be the wrong value for published_at.
+            published_at=event.timestamp_utc,
+            source=source,
+            source_kind="plugin",
+        )
+
+    def _ingest_inbound_events(self) -> int:
+        """Store and relay inbound transport events, preserving their identity.
+
+        Unlike source-plugin items, inbound mesh/transport events arrive as
+        fully-formed ``EmergencyEvent``s (stable ``event_id``, ``origin_node_id``,
+        ``ttl_hops``, ``seen_nodes``). They must NOT be re-minted, or cross-node
+        dedup/loop/storm protection breaks — so they bypass the AlertItem pipeline.
+        """
+
+        if self.registry is None and self.forwarding is None:
+            return 0
+        stored = 0
+        existing_url_cache: Dict[str, bool] = {}
+        for event in self._drain_inbound_events():
+            try:
+                # Skip events we already hold locally before touching the mesh
+                # queue, so an already-stored alert isn't re-enqueued for forward.
+                # Cached so repeated duplicates don't reopen a connection each time.
+                url = event.url or event.event_id
+                if self._url_exists_cached(url, existing_url_cache):
+                    continue
+                # Read-only mesh dedup/loop check BEFORE storing — looped or
+                # already-seen events are skipped without side effects. The
+                # state-mutating offer() (mark-seen + enqueue forward) only runs
+                # after a successful durable insert below, so a failed insert
+                # (e.g. transient lock) can't lose the event by pre-marking it seen.
+                if self.forwarding is not None and (
+                    self.node_id in event.seen_nodes
+                    or self.forwarding.has_seen(event.event_id)
+                ):
+                    continue
+                location = event.location or {}
+                source_name = event.sources[0] if event.sources else "mesh"
+                # published_at is the observed/published time (always present);
+                # the event_timestamp_utc column carries the hazard-occurrence time
+                # when the inbound event provides one, else the observed time.
+                observed = event.timestamp_utc
+                event_time = event.event_timestamp_utc or event.timestamp_utc
+                inserted = database.insert_alert(
+                    url=url,
+                    title=event.title,
+                    snippet=event.summary,
+                    published_at=observed,
+                    source=source_name,
+                    source_kind="mesh",
+                    severity=event.severity,
+                    confidence=event.confidence,
+                    event_timestamp_utc=event_time,
+                    impact_score=event.impact_score,
+                    predictive_outcome=event.predictive_outcome,
+                    is_relevant=True,
+                    subject=self.config.subject,
+                    location_name=location.get("name") or self.config.location_name,
+                    location_zip_code=(
+                        str(location["zip_code"]) if location.get("zip_code") else None
+                    ),
+                    # Coerce coordinates from an external transport so non-numeric
+                    # strings don't land in the REAL columns and leak to /api/alerts.
+                    location_latitude=_coerce_coord(location.get("latitude")),
+                    location_longitude=_coerce_coord(location.get("longitude")),
+                    normalized_payload=event.to_dict(),
+                )
+                if inserted:
+                    stored += 1
+                    existing_url_cache[url] = True
+                    # Now that the event is durably stored, record it on the mesh
+                    # (mark-seen + enqueue a forward hop).
+                    if self.forwarding is not None:
+                        self.forwarding.offer(event)
+                    # Relay the ORIGINAL event (identity preserved) to egress.
+                    if self.registry is not None:
+                        self.registry.publish(event)
+                    if self.on_new_alert:
+                        self.on_new_alert(
+                            {
+                                "url": url,
+                                "title": event.title,
+                                "snippet": event.summary,
+                                "published_at": observed,
+                                "source": source_name,
+                                "severity": event.severity,
+                                "confidence": event.confidence,
+                                "event_timestamp_utc": event_time,
+                                "location": location,
+                                "impact_score": event.impact_score,
+                                "predictive_outcome": event.predictive_outcome,
+                                "is_relevant": True,
+                                "created_at": datetime.utcnow().isoformat(),
+                            }
+                        )
+            except Exception:
+                logger.exception("Failed to ingest inbound event %s", event.event_id)
+        return stored
+
+    def _publish_platform_event(
+        self,
+        item: AlertItem,
+        parsed: ParsedImpact,
+        normalized: Dict,
+    ) -> None:
+        """Emit a stored alert as an EmergencyEvent to the mesh + egress plugins."""
+
+        if self.registry is None and self.forwarding is None:
+            return
+        try:
+            event = EmergencyEvent.from_normalized(
+                normalized=normalized,
+                title=item.title,
+                snippet=item.snippet,
+                impact_score=parsed.impact_score,
+                predictive_outcome=parsed.predictive_outcome,
+                url=item.url,
+                source=item.source,
+                source_kind=item.source_kind,
+                merged_sources=item.merged_sources,
+                origin_node_id=self.node_id,
+            )
+            # Stamp this node + enqueue a hop for forwarding (store-and-forward).
+            if self.forwarding is not None:
+                self.forwarding.offer(event)
+            if self.registry is not None:
+                self.registry.publish(event)
+        except Exception:
+            logger.exception("Failed to publish platform event for %s", item.url)
 
     async def process_items(self, items: Iterable[AlertItem]) -> int:
         new_count = 0
@@ -1098,12 +1368,16 @@ class MonitorEngine:
                             "created_at": datetime.utcnow().isoformat(),
                         }
                     )
+                self._publish_platform_event(item, parsed, normalized)
         logger.info("Processed %d items, inserted %d", total, new_count)
         return new_count
 
     async def run_once(self) -> int:
         items = await self.gather_items()
-        return await self.process_items(items)
+        new_count = await self.process_items(items)
+        # Inbound transport events take the identity-preserving path.
+        new_count += self._ingest_inbound_events()
+        return new_count
 
     async def run_forever(self) -> None:
         poll_seconds = max(60, self.config.polling_minutes * 60)
@@ -1112,6 +1386,18 @@ class MonitorEngine:
                 await self.run_once()
             except Exception:
                 pass
+            # Bound the dedup ledger so it can't grow without limit, but throttle
+            # to at most hourly — prune only removes rows past a long retention
+            # window, so running it every poll cycle is needless DB churn/flash
+            # wear on long-lived edge devices.
+            if self.forwarding is not None:
+                now = perf_counter()
+                if now - self._last_prune >= self._prune_interval_seconds:
+                    self._last_prune = now
+                    try:
+                        self.forwarding.prune()
+                    except Exception:
+                        logger.exception("Failed to prune mesh store-and-forward tables")
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=poll_seconds)
             except asyncio.TimeoutError:
@@ -1119,3 +1405,10 @@ class MonitorEngine:
 
     def stop(self) -> None:
         self._stop_event.set()
+        # Tear down plugin resources (e.g. MQTT loop threads) so they don't leak
+        # across a stop/restart of monitoring.
+        if self.registry is not None:
+            try:
+                self.registry.stop_all()
+            except Exception:
+                logger.exception("Failed to stop plugin registry")

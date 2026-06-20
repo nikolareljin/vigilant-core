@@ -72,6 +72,9 @@ class AppConfig:
     context_max_current: int = 20
     context_max_historical: int = 6
     context_enable_historical: bool = True
+    # Mesh node identity (platform: emergency-services coordination).
+    node_label: Optional[str] = None
+    node_role: str = "hub"
     # Plugin kernel: list of {type, name, enabled, options} entries.
     plugins: List[dict] = field(default_factory=list)
 
@@ -118,6 +121,15 @@ def _coerce_int(value: object, default: int) -> int:
         return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return default
+
+
+_VALID_NODE_ROLES = ("hub", "edge", "relay")
+
+
+def _coerce_node_role(value: object) -> str:
+    """Normalize and validate a mesh node role, defaulting to ``hub``."""
+    role = str(value if value is not None else "hub").strip().lower()
+    return role if role in _VALID_NODE_ROLES else "hub"
 
 
 def _coerce_bool(value: object, default: bool) -> bool:
@@ -203,6 +215,10 @@ def load_config() -> AppConfig:
         context_enable_historical=_coerce_bool(
             data.get("context_enable_historical", True), True
         ),
+        node_label=(
+            str(data["node_label"]) if data.get("node_label") is not None else None
+        ),
+        node_role=_coerce_node_role(data.get("node_role")),
         plugins=list(data["plugins"]) if isinstance(data.get("plugins"), list) else [],
     )
     cfg.news_api_key = cfg.news_api_key or os.getenv("NEWS_API_KEY")
@@ -260,6 +276,9 @@ def save_config(config: AppConfig) -> None:
         "context_max_current": config.context_max_current,
         "context_max_historical": config.context_max_historical,
         "context_enable_historical": config.context_enable_historical,
+        "node_label": config.node_label,
+        # Normalize on write so config.json round-trips to a canonical role.
+        "node_role": _coerce_node_role(config.node_role),
         "plugins": config.plugins,
     }
     config_path().write_text(json.dumps(data, indent=2), encoding="utf-8")
