@@ -21,6 +21,7 @@ power resumes with its dedup memory and pending forwards intact.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -28,6 +29,8 @@ from typing import Callable, List
 
 from contracts import EmergencyEvent
 from utils import database
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -60,8 +63,20 @@ class ForwardingQueue:
         self._connect = connect
         self.init_schema()
 
+    def _open(self) -> sqlite3.Connection:
+        """Open a connection with ``sqlite3.Row`` factory.
+
+        The injected ``connect=`` seam may hand back a plain connection (tuple
+        rows); forcing the row factory here lets us address columns by name
+        without raising on those connections.
+        """
+
+        conn = self._connect()
+        conn.row_factory = sqlite3.Row
+        return conn
+
     def init_schema(self) -> None:
-        with self._connect() as conn:
+        with self._open() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS mesh_seen_events (
@@ -89,31 +104,36 @@ class ForwardingQueue:
 
     # ----- dedup memory --------------------------------------------------
     def has_seen(self, event_id: str) -> bool:
-        with self._connect() as conn:
+        with self._open() as conn:
             cur = conn.execute(
                 "SELECT 1 FROM mesh_seen_events WHERE event_id = ? LIMIT 1", (event_id,)
             )
             return cur.fetchone() is not None
 
-    def _record_seen(self, conn: sqlite3.Connection, event_id: str) -> None:
-        conn.execute(
-            "INSERT OR IGNORE INTO mesh_seen_events (event_id, first_seen_utc) VALUES (?, ?)",
-            (event_id, _now_iso()),
-        )
-
     # ----- core gossip logic --------------------------------------------
     def offer(self, event: EmergencyEvent) -> OfferResult:
-        """Consider an event for forwarding; suppress loops and duplicates."""
+        """Consider an event for forwarding; suppress loops and duplicates.
+
+        Dedup is atomic: the ``event_id`` is inserted into ``mesh_seen_events``
+        (PRIMARY KEY) inside one transaction, so concurrent offers of the same
+        event race on the unique constraint and exactly one wins — a separate
+        has_seen() pre-check would let both be accepted under threaded use.
+        """
 
         if self.node_id in event.seen_nodes:
             return OfferResult("looped", False)
-        if self.has_seen(event.event_id):
-            return OfferResult("duplicate", False)
 
-        event.mark_seen(self.node_id)
-        will_forward = event.ttl_hops > 0
-        with self._connect() as conn:
-            self._record_seen(conn, event.event_id)
+        now = _now_iso()
+        with self._open() as conn:
+            try:
+                conn.execute(
+                    "INSERT INTO mesh_seen_events (event_id, first_seen_utc) VALUES (?, ?)",
+                    (event.event_id, now),
+                )
+            except sqlite3.IntegrityError:
+                return OfferResult("duplicate", False)
+            event.mark_seen(self.node_id)
+            will_forward = event.ttl_hops > 0
             if will_forward:
                 forward_copy = event.decremented()
                 conn.execute(
@@ -126,37 +146,51 @@ class ForwardingQueue:
                         forward_copy.event_id,
                         forward_copy.to_json(),
                         forward_copy.ttl_hops,
-                        _now_iso(),
+                        now,
                     ),
                 )
         return OfferResult("new", will_forward)
 
     # ----- queue draining (transports call these) ------------------------
     def pending(self, limit: int = 100) -> List[EmergencyEvent]:
-        """Return enqueued, not-yet-forwarded events (oldest first)."""
+        """Return enqueued, not-yet-forwarded events (oldest first).
 
-        with self._connect() as conn:
+        Rows that can't be decoded are marked forwarded so a corrupt payload
+        can't permanently wedge the queue (``pending_count`` would otherwise never
+        drain and transports would spin on it)."""
+
+        events: List[EmergencyEvent] = []
+        bad_ids: List[str] = []
+        with self._open() as conn:
             cur = conn.execute(
-                "SELECT payload_json FROM mesh_forward_queue "
+                "SELECT event_id, payload_json FROM mesh_forward_queue "
                 "WHERE forwarded = 0 ORDER BY enqueued_utc ASC LIMIT ?",
                 (limit,),
             )
-            rows = cur.fetchall()
-        events: List[EmergencyEvent] = []
-        for row in rows:
-            try:
-                # Trusted local storage we wrote ourselves: decode leniently so the
-                # original trust tier/signature is preserved for relay (strict
-                # decode would clamp it as if it were untrusted inbound).
-                events.append(
-                    EmergencyEvent.from_json(row["payload_json"], strict=False)
+            for row in cur.fetchall():
+                try:
+                    # Trusted local storage we wrote ourselves: decode leniently so
+                    # the original trust tier/signature is preserved for relay
+                    # (strict decode would clamp it as untrusted inbound).
+                    events.append(
+                        EmergencyEvent.from_json(row["payload_json"], strict=False)
+                    )
+                except (KeyError, ValueError, json.JSONDecodeError, TypeError):
+                    bad_ids.append(row["event_id"])
+            for event_id in bad_ids:
+                conn.execute(
+                    "UPDATE mesh_forward_queue SET forwarded = 1, attempts = attempts + 1 "
+                    "WHERE event_id = ?",
+                    (event_id,),
                 )
-            except (KeyError, ValueError, json.JSONDecodeError, TypeError):
-                continue
+        if bad_ids:
+            logger.warning(
+                "Dropped %d undecodable mesh forward-queue row(s)", len(bad_ids)
+            )
         return events
 
     def mark_forwarded(self, event_id: str) -> None:
-        with self._connect() as conn:
+        with self._open() as conn:
             conn.execute(
                 "UPDATE mesh_forward_queue SET forwarded = 1, attempts = attempts + 1 "
                 "WHERE event_id = ?",
@@ -164,7 +198,7 @@ class ForwardingQueue:
             )
 
     def pending_count(self) -> int:
-        with self._connect() as conn:
+        with self._open() as conn:
             cur = conn.execute(
                 "SELECT COUNT(*) AS c FROM mesh_forward_queue WHERE forwarded = 0"
             )

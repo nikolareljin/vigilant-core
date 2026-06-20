@@ -50,14 +50,19 @@ def load_or_create_node(
     if path.exists():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            loaded_role = str(data.get("role") or "hub")
             return Node(
                 node_id=str(data["node_id"]),
                 label=str(data.get("label") or data["node_id"]),
-                role=str(data.get("role") or "hub"),
+                # Validate the persisted role too, so a hand-edited/corrupted file
+                # can't leave the node with an unsupported role.
+                role=loaded_role if loaded_role in VALID_ROLES else "hub",
                 created_at=str(data.get("created_at") or _now_iso()),
             )
-        except Exception:
-            # Corrupt identity file: fall through and recreate.
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+            # Corrupt/parse-failed identity file: recreate. Operational errors
+            # (e.g. permission/IO) are intentionally NOT caught here so they fail
+            # loudly instead of silently rekeying the node.
             pass
     node = Node(
         node_id=new_ulid(),
@@ -65,8 +70,17 @@ def load_or_create_node(
         role=role if role in VALID_ROLES else "hub",
         created_at=_now_iso(),
     )
-    path.write_text(json.dumps(node.as_dict(), indent=2), encoding="utf-8")
+    _atomic_write(path, json.dumps(node.as_dict(), indent=2))
     return node
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically (temp file in the same dir + replace),
+    so a crash/power-loss can't leave a half-written identity file."""
+
+    tmp = path.with_name(f"{path.name}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
 
 
 def _now_iso() -> str:

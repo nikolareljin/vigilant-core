@@ -37,6 +37,25 @@ class NodeIdentityTests(unittest.TestCase):
             node = load_or_create_node(base=Path(tmp), role="bogus")
             self.assertEqual(node.role, "hub")
 
+    def test_loaded_invalid_role_falls_back_to_hub(self) -> None:
+        import json
+        from mesh.node import node_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            node_path(base).write_text(
+                json.dumps({"node_id": "01J9Z3R8K2QF7M4V0WXYZ12345",
+                            "role": "bogus", "label": "x", "created_at": "t"}),
+                encoding="utf-8",
+            )
+            self.assertEqual(load_or_create_node(base=base).role, "hub")
+
+    def test_write_is_atomic_no_tmp_left(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            load_or_create_node(base=base)
+            self.assertFalse(list(base.glob("*.tmp")))
+
 
 class StoreAndForwardTests(unittest.TestCase):
     def test_offer_dedup_loop_and_ttl(self) -> None:
@@ -91,6 +110,41 @@ class StoreAndForwardTests(unittest.TestCase):
                 self.assertEqual(resumed.pending_count(), 0)
                 # Dedup memory persists even after the queue is drained.
                 self.assertTrue(resumed.has_seen(event.event_id))
+
+    def test_works_with_plain_injected_connection(self) -> None:
+        # The documented connect= seam may hand back a plain connection (tuple
+        # rows); the queue must still work via the row_factory it sets.
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "mesh.db")
+            queue = ForwardingQueue("NODE-A", connect=lambda: sqlite3.connect(db))
+            result = queue.offer(_event(ttl=2))
+            self.assertEqual(result.status, "new")
+            self.assertEqual(len(queue.pending()), 1)
+            self.assertEqual(queue.pending_count(), 1)
+
+    def test_pending_drains_undecodable_rows(self) -> None:
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "mesh.db")
+
+            def connect():
+                return sqlite3.connect(db)
+
+            queue = ForwardingQueue("NODE-A", connect=connect)
+            # Inject a corrupt queue row directly.
+            with connect() as conn:
+                conn.execute(
+                    "INSERT INTO mesh_forward_queue (event_id, payload_json, ttl_hops, "
+                    "enqueued_utc) VALUES (?, ?, ?, ?)",
+                    ("BADROW", "not-json", 1, "t"),
+                )
+            self.assertEqual(queue.pending_count(), 1)
+            self.assertEqual(queue.pending(), [])  # bad row decoded out
+            # The corrupt row is marked forwarded so it can't wedge the queue.
+            self.assertEqual(queue.pending_count(), 0)
 
 
 if __name__ == "__main__":
