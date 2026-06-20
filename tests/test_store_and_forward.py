@@ -159,6 +159,29 @@ class StoreAndForwardTests(unittest.TestCase):
             # The corrupt row is marked forwarded so it can't wedge the queue.
             self.assertEqual(queue.pending_count(), 0)
 
+    def test_pending_drops_incomplete_payload_instead_of_minting(self) -> None:
+        import json
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = str(Path(tmp) / "mesh.db")
+
+            def connect():
+                return sqlite3.connect(db)
+
+            queue = ForwardingQueue("NODE-A", connect=connect)
+            # Valid JSON object but missing mesh-critical fields (ttl_hops/seen_nodes):
+            # must be dropped, not minted into a fresh full-TTL event.
+            payload = json.dumps({"title": "x", "schema_version": "2.0"})
+            with connect() as conn:
+                conn.execute(
+                    "INSERT INTO mesh_forward_queue (event_id, payload_json, ttl_hops, "
+                    "enqueued_utc) VALUES (?, ?, ?, ?)",
+                    ("PARTIAL", payload, 1, "t"),
+                )
+            self.assertEqual(queue.pending(), [])
+            self.assertEqual(queue.pending_count(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

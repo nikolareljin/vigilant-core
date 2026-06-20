@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Callable, List
 
 from contracts import EmergencyEvent
+from contracts.event import REQUIRED_ON_DECODE
 from utils import database
 
 logger = logging.getLogger(__name__)
@@ -97,9 +98,13 @@ class ForwardingQueue:
                 )
                 """
             )
+            # Composite index satisfies the hot drain query's filter AND ordering
+            # (WHERE forwarded = 0 ORDER BY enqueued_utc), avoiding a sort as the
+            # queue grows. Drop the older filter-only index it subsumes.
+            conn.execute("DROP INDEX IF EXISTS idx_mesh_queue_forwarded")
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_mesh_queue_forwarded "
-                "ON mesh_forward_queue(forwarded)"
+                "CREATE INDEX IF NOT EXISTS idx_mesh_queue_forwarded_enqueued "
+                "ON mesh_forward_queue(forwarded, enqueued_utc)"
             )
 
     # ----- dedup memory --------------------------------------------------
@@ -169,12 +174,18 @@ class ForwardingQueue:
             )
             for row in cur.fetchall():
                 try:
-                    # Decode leniently so the original trust tier/signature is
-                    # preserved for relay (strict decode would clamp it as
-                    # untrusted inbound), but still validate() the structure so a
-                    # corrupted/tampered on-disk row isn't forwarded as a valid
-                    # event.
-                    event = EmergencyEvent.from_json(row["payload_json"], strict=False)
+                    # Require the mesh-critical fields to be present (so a
+                    # partially corrupt row can't be minted into a "fresh"
+                    # full-TTL event and break dedup/storm protection), then decode
+                    # leniently so the original trust tier/signature is preserved
+                    # for relay (not clamped as untrusted inbound), and validate()
+                    # the structure.
+                    data = json.loads(row["payload_json"])
+                    if not isinstance(data, dict) or any(
+                        data.get(k) in (None, "") for k in REQUIRED_ON_DECODE
+                    ):
+                        raise ValueError("missing required field(s)")
+                    event = EmergencyEvent.from_dict(data, strict=False)
                     event.validate()
                     events.append(event)
                 except (KeyError, ValueError, json.JSONDecodeError, TypeError):
