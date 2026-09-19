@@ -4,6 +4,26 @@ All notable changes to VigilantCore will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lint was inheriting a rule set that could change under it.** There was no
+  ruff configuration, and the lint command installs ruff unpinned
+  (`pip install ruff && ruff check .`), so the effective rules were whatever the
+  ruff of the day defaulted to. ruff 0.16.0 widened that default, and the same
+  unchanged code went from 0 findings to 409 — turning the next pull request
+  red without it having touched any Python.
+
+  `ruff.toml` now declares the selection explicitly (`E4`, `E7`, `E9`, `F`),
+  which is exactly what ruff applied by default through 0.15.x. This restores
+  the rules that were actually in force rather than silencing any that were
+  being enforced, and the result no longer depends on which ruff CI installs —
+  verified identical under 0.15.12, 0.16.0 and 0.16.8.
+
+  Widening the selection is worthwhile, deliberate work: ruff 0.16 reports 409
+  findings here, dominated by `UP006`/`UP045` (253), `BLE001` (36), `I001` (23)
+  and `RUF100` (14), of which roughly 323 are auto-fixable. That belongs in its
+  own change where the diff can be read on its own terms.
+
 ### Changed
 
 - Pass `update_production_tag: true` explicitly to the shared auto-tag workflow.
